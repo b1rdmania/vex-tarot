@@ -1,0 +1,12 @@
+{
+  "name": "vex-tarot",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-05-01",
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "vars": {
+    "VOICE_ID": "X6VIT9ZXy5Nr7EmuLOGz",
+    "LLM_MODEL": "moonshotai/kimi-k3",
+    "TTS_MODEL": "eleven_flash_v2_5",
+    "STT_MODEL": "scribe_v1"
+  }
+}
