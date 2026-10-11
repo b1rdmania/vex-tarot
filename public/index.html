@@ -2,8 +2,9 @@
 <html lang="en-GB">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vex</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#140d10">
+<title>Hot Goth Tarot · Demo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=IBM+Plex+Mono:wght@400&display=swap">
 <link rel="stylesheet" href="style.css">
@@ -11,6 +12,10 @@
 </head>
 <body>
 <main id="stage" class="live" data-state="idle">
+  <header class="title">
+    <span class="demo">Demo</span>
+    <h1>Hot Goth Tarot</h1>
+  </header>
   <div class="portal" id="portal">
     <video id="face" autoplay playsinline muted></video>
     <svg class="stand-in" viewBox="0 0 200 250" aria-hidden="true">
@@ -33,7 +38,7 @@
 
   <div class="table" id="table"></div>
 
-  <div class="prompt" id="prompt">Sit down. Press <kbd>space</kbd>.</div>
+  <button class="prompt" id="prompt" type="button"><span class="on-key">Sit down. Press <kbd>space</kbd>.</span><span class="on-touch">Sit down. Tap here.</span></button>
   <pre class="debug" id="debug" hidden></pre>
 </main>
 <script type="module" src="live.js"></script>

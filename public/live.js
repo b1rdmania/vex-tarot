@@ -6,6 +6,7 @@ import { advance } from "./spoken.js";
 const $ = (id) => document.getElementById(id);
 const stage = $("stage"), portal = $("portal"), face = $("face"), table = $("table");
 const subs = $("subs"), question = $("question"), prompt = $("prompt"), debug = $("debug");
+const PROMPT = prompt.innerHTML;
 const RESET_AFTER_MS = 12_000;
 // The access code arrives once in the link (?code=...) and is kept for reloads.
 const accessCode = new URLSearchParams(location.search).get("code") || localStorage.getItem("vexCode") || "";
@@ -198,6 +199,6 @@ function reset() {
   delete stage.dataset.agent;
   subs.textContent = "";
   question.textContent = "";
-  prompt.innerHTML = "Sit down. Press <kbd>space</kbd>.";
+  prompt.innerHTML = PROMPT;
   stage.dataset.state = "idle";
 }

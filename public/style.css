@@ -14,7 +14,8 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; background: var(--velvet); color: var(--wax); overflow: hidden; }
+html { height: 100%; background-color: #140d10; }
+body { height: 100%; margin: 0; background: var(--velvet); color: var(--wax); overflow: clip; }
 body { font-family: var(--f-display); }
 
 main {
