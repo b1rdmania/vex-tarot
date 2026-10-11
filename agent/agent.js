@@ -57,6 +57,20 @@ function cardBrief(cards) {
   return `\n\nTHE CARDS\nThe deck is already shuffled. These are this guest's cards. Do not mention any of them until you have called deal.\nShort spread:\n${list(SPREADS.short)}\nCeltic Cross, only if they ask for it:\n${list(SPREADS.celtic)}`;
 }
 
+// The plugin only tells the avatar to stop if her line is still being sent to
+// it. TTS runs faster than speech, so the whole line is usually sent already, and
+// then an interruption is ignored: the avatar talks on for seconds and the agent
+// waits 5 s before giving up. Stop the avatar whenever it is still speaking.
+class StoppableAvatar extends liveavatar.AvatarSession {
+  onClearBuffer(ev) {
+    if (ev.wasCapturing || !this.avatarSpeaking) return super.onClearBuffer(ev);
+    this.audioPlaying = false;
+    this.sendEvent({ type: "agent.interrupt", event_id: crypto.randomUUID() });
+    this.audioBuffer?.notifyPlaybackFinished(this.playbackPosition, true);
+    this.playbackPosition = 0;
+  }
+}
+
 // Drop the act: cut her off, speak the fixed helpline line, then close.
 function stopForCrisis(session, state, send) {
   if (state.crisis) return;
@@ -111,8 +125,8 @@ class Vex extends voice.Agent {
 
 export default defineAgent({
   prewarm: async (proc) => {
-    // Stricter than the defaults (0.5, 50 ms) so laughter and table chatter don't count as a turn.
-    proc.userData.vad = await silero.VAD.load({ activationThreshold: 0.65, minSpeechDuration: 250 });
+    // A little stricter than the defaults (0.5, 50 ms) so a laugh doesn't count as a turn.
+    proc.userData.vad = await silero.VAD.load({ activationThreshold: 0.55, minSpeechDuration: 100 });
   },
   entry: async (ctx) => {
     const logger = log();
@@ -137,8 +151,9 @@ export default defineAgent({
       turnHandling: {
         turnDetection: "vad",
         // A party is loud. Only a deliberate interruption should cut her off.
-        interruption: { minDuration: 1200, minWords: 3, resumeFalseInterruption: true },
-        endpointing: { minDelay: 500, maxDelay: 3000 },
+        interruption: { minDuration: 600, minWords: 1, resumeFalseInterruption: true },
+        // Wait for a real pause before she answers, so she doesn't jump in mid-sentence.
+        endpointing: { minDelay: 900, maxDelay: 3500 },
       },
       userAwayTimeout: 30,
     });
@@ -193,7 +208,7 @@ export default defineAgent({
     const avatarKey = env("LIVEAVATAR_API_KEY");
     if (avatarKey) {
       const sandbox = env("LIVEAVATAR_SANDBOX", "1") === "1";
-      const avatar = new liveavatar.AvatarSession({
+      const avatar = new StoppableAvatar({
         apiKey: avatarKey,
         avatarId: sandbox ? SANDBOX_AVATAR : env("LIVEAVATAR_AVATAR_ID"),
         isSandbox: sandbox,
