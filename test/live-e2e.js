@@ -24,7 +24,7 @@ const at = () => ((Date.now() - t0) / 1000).toFixed(1).padStart(6) + "s";
 page.on("console", (m) => m.text().startsWith("[vex]") && console.log(at(), m.text().slice(6)));
 page.on("pageerror", (e) => console.log(at(), "PAGE ERROR", e.message));
 
-await page.goto("http://localhost:8787/");
+await page.goto(process.env.SITE || "http://localhost:8787/");
 await page.keyboard.press("Space");
 
 let lastSubs = "", shot = 0, turned = 0;

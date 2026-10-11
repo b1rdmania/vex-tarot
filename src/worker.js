@@ -6,6 +6,11 @@ const POSITIONS = ["Past", "Present", "Future"];
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // Every API call spends money (LiveAvatar, ElevenLabs, OpenRouter). On a public
+    // URL, set ACCESS_CODE and share the link as /?code=...
+    if (url.pathname.startsWith("/api/") && env.ACCESS_CODE && request.headers.get("X-Vex-Code") !== env.ACCESS_CODE) {
+      return json({ error: "wrong code" }, 401);
+    }
     try {
       if (request.method === "POST" && url.pathname === "/api/token") return json(await token(env));
       if (request.method === "POST" && url.pathname === "/api/stt") return json(await stt(request, env));

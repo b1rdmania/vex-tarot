@@ -122,10 +122,13 @@
   };
 
   // ---------- network ----------
+  // The access code arrives once in the link (?code=...) and is kept for reloads.
+  const accessCode = new URLSearchParams(location.search).get("code") || localStorage.getItem("vexCode") || "";
+  if (accessCode) localStorage.setItem("vexCode", accessCode);
   async function post(path, body, isJson = true) {
     const res = await fetch(path, {
       method: "POST",
-      headers: isJson ? { "Content-Type": "application/json" } : { "Content-Type": body.type || "audio/webm" },
+      headers: { "X-Vex-Code": accessCode, "Content-Type": isJson ? "application/json" : body.type || "audio/webm" },
       body: isJson ? JSON.stringify(body) : body,
     });
     const data = await res.json();

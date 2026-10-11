@@ -111,3 +111,12 @@ CHROME=/path/to/chrome npm run test:e2e
 ## Card images
 
 The cards are the 1909 Rider-Waite-Smith deck, which is in the public domain. The scans come from [metabismuth/tarot-json](https://github.com/metabismuth/tarot-json) (MIT).
+
+## Test deploy
+
+The kiosk runs on Cloudflare Workers at https://vex-tarot.andy-ff7.workers.dev. Deploy with `npx wrangler deploy`. Secrets are the keys in `.dev.vars`, uploaded with `wrangler secret bulk`.
+
+Every API call spends money, so the API needs `ACCESS_CODE`. Share the link as `/?code=...`. The kiosk keeps the code for reloads.
+
+The agent worker still runs on the laptop (`cd agent && npm run dev`). LiveKit Cloud sends each session to it. When the laptop sleeps, the site loads but Vex does not join.
+

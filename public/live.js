@@ -7,6 +7,9 @@ const $ = (id) => document.getElementById(id);
 const stage = $("stage"), portal = $("portal"), face = $("face"), table = $("table");
 const subs = $("subs"), question = $("question"), prompt = $("prompt"), debug = $("debug");
 const RESET_AFTER_MS = 12_000;
+// The access code arrives once in the link (?code=...) and is kept for reloads.
+const accessCode = new URLSearchParams(location.search).get("code") || localStorage.getItem("vexCode") || "";
+if (accessCode) localStorage.setItem("vexCode", accessCode);
 
 let room = null;
 let started = 0;
@@ -36,7 +39,7 @@ async function start() {
   subs.textContent = "";
   question.textContent = "";
   try {
-    const res = await fetch("/api/token", { method: "POST" });
+    const res = await fetch("/api/token", { method: "POST", headers: { "X-Vex-Code": accessCode } });
     if (!res.ok) throw new Error(`token ${res.status}`);
     const { url, token, room: name } = await res.json();
     log("room", name);
