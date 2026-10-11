@@ -11,10 +11,10 @@ There are two versions:
 
 1. The guest presses space. The kiosk asks `/api/token` for a LiveKit token. The token puts the `vex` agent in a new room.
 2. The agent worker (`agent/agent.js`) joins. Deepgram transcribes the guest, Kimi K3 (on OpenRouter) writes Vex's lines and ElevenLabs speaks them. If `LIVEAVATAR_API_KEY` is set, LiveAvatar renders her face from the same audio.
-3. When Vex has the question, the model calls `deal`. The worker draws the cards with a crypto random number generator. The model does not choose them.
-4. For each card, the model calls `turn_card` and then reads the card. It does not know a card until it turns it.
-5. The worker sends each table event to the kiosk on the `vex` data topic. The kiosk flips a card when her synced subtitles say its name.
-6. After the verdict, the model calls `end_reading`. The worker deletes the room when her last line has played, and the kiosk resets.
+3. Before she speaks, the worker draws ten cards with a crypto random number generator and puts them in her instructions. The model does not choose them. The kiosk gets the same list.
+4. When Vex has the question, the model calls `deal` with the spread (five cards, or the Celtic Cross if asked). The kiosk lays the cards face down.
+5. She reads the cards in order. The kiosk flips each one when her synced subtitles say its name. If `deal` never arrives, the kiosk lays the short spread when she names the first card. Nothing on screen depends on a tool call, because K3 sometimes writes a tool call as text instead of making it.
+6. The reading ends with the line that names the last card. The worker deletes the room and the kiosk hangs up and resets.
 
 A session also ends if the guest is silent for 30 seconds. After 8 minutes Vex is told to wrap up.
 
@@ -42,8 +42,8 @@ You need Node 22 and Wrangler.
    ELEVENLABS_KEY=...
    OPENROUTER_KEY=...
    LIVEAVATAR_API_KEY=...   # optional; without it Vex is voice only
-   LIVEAVATAR_SANDBOX=1     # 1 = free "Wayne" test avatar, 1-minute sessions
-   LIVEAVATAR_AVATAR_ID=... # your own avatar, used when LIVEAVATAR_SANDBOX=0
+   LIVEAVATAR_SANDBOX=0     # 1 = free "Wayne" test avatar, 1-minute sessions, no credits
+   LIVEAVATAR_AVATAR_ID=... # used when LIVEAVATAR_SANDBOX=0; Ella (Disinterested) is 4c9a4e2d-67df-465a-b6ca-4199b26cebb9
    ```
 
 3. Start both:

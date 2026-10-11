@@ -1,6 +1,7 @@
 // Vex kiosk, live session. Joins a LiveKit room; the `vex` worker joins too.
 // The worker sends table events on the "vex" data topic; this page draws them.
 import { Room, RoomEvent, Track } from "./vendor/livekit-client.esm.mjs";
+import { advance } from "./spoken.js";
 
 const $ = (id) => document.getElementById(id);
 const stage = $("stage"), portal = $("portal"), face = $("face"), table = $("table");
@@ -10,10 +11,11 @@ const RESET_AFTER_MS = 12_000;
 let room = null;
 let started = 0;
 let mouthStop = null;
-// Turned cards wait here until her speech reaches them. The worker turns the
-// next card while she is still reading the last one, so flipping on the event
-// itself would run a card ahead of her voice.
-let pending = [];
+// The worker sends every card at the start. A card flips when her subtitles
+// reach its name, so the table follows her voice, not the model's tool calls.
+let deck = null; // { cards, spreads }
+let spread = null; // the dealt cards, in order
+let flipped = 0;
 
 function log(...args) {
   const line = `${((performance.now() - started) / 1000).toFixed(1).padStart(6)}s  ${args.join(" ")}`;
@@ -92,12 +94,18 @@ function wire(r) {
 
 function onEvent(msg) {
   if (msg.type === "state") stage.dataset.agent = msg.state;
-  if (msg.type === "deal") deal(msg.positions, msg.question);
-  if (msg.type === "turn") queueTurn(msg.index, msg.card);
+  if (msg.type === "cards") deck = msg;
+  // The worker is closing the session. Hang up here too, in case it can't delete the room.
+  if (msg.type === "end") setTimeout(() => room?.disconnect(), 1000);
+  if (msg.type === "deal") deal(msg.spread, msg.question);
   if (msg.type === "crisis") table.replaceChildren();
 }
 
-function deal(positions, q) {
+function deal(name, q) {
+  if (spread || !deck) return;
+  const positions = deck.spreads[name] || deck.spreads.short;
+  spread = deck.cards.slice(0, positions.length);
+  log("deal", name);
   question.textContent = q ? `“${q}”` : "";
   table.dataset.count = positions.length;
   table.replaceChildren();
@@ -109,14 +117,6 @@ function deal(positions, q) {
     table.append(slot);
     setTimeout(() => slot.querySelector(".card").classList.add("dealt"), 250 + i * 220);
   });
-}
-
-function queueTurn(i, c) {
-  // A newer card means she has moved on, so anything older flips now.
-  [...pending].forEach(flipNow);
-  const key = c.name.toLowerCase().replace(/^the /, "");
-  const entry = { i, c, key, timer: setTimeout(() => flipNow(entry), 60_000) };
-  pending.push(entry);
 }
 
 // Show only what she is saying now: the last sentence or two, about two lines.
@@ -131,15 +131,17 @@ function tail(text, max = 150) {
 }
 
 function flipIfSpoken(text) {
-  const said = text.toLowerCase();
-  pending.filter((p) => said.includes(p.key)).forEach(flipNow);
-}
-
-function flipNow(entry) {
-  if (!pending.includes(entry)) return;
-  pending = pending.filter((p) => p !== entry);
-  clearTimeout(entry.timer);
-  turn(entry.i, entry.c);
+  if (!deck) return;
+  // No deal from the worker but she has started reading: lay the short spread now.
+  if (!spread && advance(text, deck.cards.slice(0, deck.spreads.short.length), 0)) deal("short");
+  if (!spread) return;
+  const reached = advance(text, spread, flipped);
+  // Let the deal animation land before the first flip.
+  for (; flipped < reached; flipped++) {
+    const i = flipped;
+    setTimeout(() => turn(i, spread[i]), table.dataset.dealt ? 0 : 1400);
+  }
+  table.dataset.dealt = "1";
 }
 
 function turn(i, c) {
@@ -180,8 +182,9 @@ function animateMouth(mediaTrack) {
 }
 
 function reset() {
-  pending.forEach((p) => clearTimeout(p.timer));
-  pending = [];
+  deck = spread = null;
+  flipped = 0;
+  delete table.dataset.dealt;
   mouthStop?.();
   mouthStop = null;
   room = null;

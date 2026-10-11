@@ -11,6 +11,7 @@ import * as liveavatar from "@livekit/agents-plugin-liveavatar";
 import * as openai from "@livekit/agents-plugin-openai";
 import * as silero from "@livekit/agents-plugin-silero";
 import OpenAI from "openai";
+import { advance } from "../public/spoken.js";
 import { CRISIS_LINE, CRISIS_PATTERN, GREETING, INSTRUCTIONS, SPREADS, WRAP_UP } from "./persona.js";
 
 const DECK = JSON.parse(readFileSync(new URL("../src/deck.json", import.meta.url), "utf8"));
@@ -47,6 +48,15 @@ function draw(n) {
   return order.slice(0, n).map((idx, i) => ({ ...DECK[idx], reversed: (rand[order.length + i] & 1) === 1 }));
 }
 
+// The deck is shuffled before she speaks. The cards go into her instructions,
+// so she cannot invent one, and nothing on screen waits on a tool call.
+// (K3 sometimes writes tool calls as text instead of making them.)
+function cardBrief(cards) {
+  const list = (positions) =>
+    positions.map((pos, i) => `${i + 1}. ${pos}: ${cards[i].name}, ${cards[i].reversed ? "reversed" : "upright"}`).join("\n");
+  return `\n\nTHE CARDS\nThe deck is already shuffled. These are this guest's cards. Do not mention any of them until you have called deal.\nShort spread:\n${list(SPREADS.short)}\nCeltic Cross, only if they ask for it:\n${list(SPREADS.celtic)}`;
+}
+
 // Drop the act: cut her off, speak the fixed helpline line, then close.
 function stopForCrisis(session, state, send) {
   if (state.crisis) return;
@@ -61,10 +71,10 @@ function stopForCrisis(session, state, send) {
 class Vex extends voice.Agent {
   constructor(state, send) {
     super({
-      instructions: INSTRUCTIONS,
+      instructions: INSTRUCTIONS + cardBrief(state.cards),
       tools: {
         deal: llm.tool({
-          description: "Shuffle and lay the spread face down. Call once, after you have the guest's question.",
+          description: "Lay the spread face down. Call once, after you have the guest's question.",
           parameters: {
             type: "object",
             properties: {
@@ -74,35 +84,10 @@ class Vex extends voice.Agent {
             required: ["spread", "question"],
           },
           execute: async ({ spread, question }) => {
-            if (state.cards) return "The cards are already dealt. Call turn_card for the next one.";
-            const positions = SPREADS[spread] || SPREADS.short;
-            state.cards = draw(positions.length).map((c, i) => ({ ...c, pos: positions[i] }));
-            state.question = question;
-            state.next = 0;
-            send({ type: "deal", spread, positions, question });
-            return `${positions.length} cards are face down. Positions in order: ${positions.join("; ")}. Say one line while they settle, then call turn_card.`;
-          },
-        }),
-        turn_card: llm.tool({
-          description: "Turn the next card face up. Returns its position, name and orientation. Read it before turning another.",
-          execute: async () => {
-            if (!state.cards) return "Nothing is dealt yet. Call deal first.";
-            if (state.next >= state.cards.length) return "Every card is turned. Give your verdict and call end_reading.";
-            const i = state.next++;
-            const c = state.cards[i];
-            send({ type: "turn", index: i, card: c });
-            const left = state.cards.length - state.next;
-            return `Card ${i + 1} of ${state.cards.length}, ${c.pos}: ${c.name}, ${c.reversed ? "reversed" : "upright"}. ${left ? `${left} still face down.` : "That was the last card."}`;
-          },
-        }),
-        end_reading: llm.tool({
-          description: "End the session after your final verdict.",
-          execute: async (_args, { ctx }) => {
-            state.ending = true;
-            send({ type: "end" });
-            // Backstop in case the verdict was spoken before this call and no further line comes.
-            setTimeout(() => state.finish?.(), 90_000);
-            return "Session ending. Say nothing more.";
+            if (state.spread) return "The cards are already dealt. Read them.";
+            state.spread = SPREADS[spread] ? spread : "short";
+            send({ type: "deal", spread: state.spread, question });
+            return "The cards are on the table. Say one line, then read them in order.";
           },
         }),
         crisis: llm.tool({
@@ -126,12 +111,13 @@ class Vex extends voice.Agent {
 
 export default defineAgent({
   prewarm: async (proc) => {
-    proc.userData.vad = await silero.VAD.load();
+    // Stricter than the defaults (0.5, 50 ms) so laughter and table chatter don't count as a turn.
+    proc.userData.vad = await silero.VAD.load({ activationThreshold: 0.65, minSpeechDuration: 250 });
   },
   entry: async (ctx) => {
     const logger = log();
     await ctx.connect();
-    const state = { cards: null, next: 0, ending: false, crisis: false, closing: false };
+    const state = { cards: draw(SPREADS.celtic.length), spread: null, spoken: 0, ending: false, crisis: false, closing: false };
     const encoder = new TextEncoder();
     const send = (msg) =>
       ctx.room.localParticipant
@@ -151,10 +137,9 @@ export default defineAgent({
       turnHandling: {
         turnDetection: "vad",
         // A party is loud. Only a deliberate interruption should cut her off.
-        interruption: { minDuration: 800, minWords: 2, resumeFalseInterruption: true },
+        interruption: { minDuration: 1200, minWords: 3, resumeFalseInterruption: true },
         endpointing: { minDelay: 500, maxDelay: 3000 },
       },
-      maxToolSteps: 16, // a Celtic Cross chains deal + 10 turns + end without the guest speaking
       userAwayTimeout: 30,
     });
 
@@ -168,7 +153,6 @@ export default defineAgent({
     session.on(AgentSessionEventTypes.UserStateChanged, (ev) => {
       if (ev.newState === "away" && !state.ending) {
         state.ending = true;
-        send({ type: "end" });
         session.say("Gone, then. The cards will remember.", { allowInterruptions: false });
       }
     });
@@ -178,19 +162,27 @@ export default defineAgent({
       logger.info({ role: item.role, text: item.textContent }, "turn");
       // Her last line has finished playing: close the room. The tool that set
       // `ending` runs while that line is still being spoken, so wait for the item.
-      const last = !state.crisis || (item.textContent || "").includes("Samaritans");
-      if (state.ending && item.role === "assistant" && last && !state.closing) {
-        setTimeout(() => state.finish(), 2000);
+      if (item.role !== "assistant" || state.closing) return;
+      // The reading ends with the line that reaches the last card (the verdict
+      // follows in the same breath). Without a deal, she was reading the short spread.
+      const spread = state.cards.slice(0, SPREADS[state.spread || "short"].length);
+      state.spoken = advance(item.textContent || "", spread, state.spoken);
+      if (!state.ending && state.spoken === spread.length) {
+        state.ending = true;
       }
+      const last = !state.crisis || (item.textContent || "").includes("Samaritans");
+      if (state.ending && last) setTimeout(() => state.finish(), 2000);
     });
     session.on(AgentSessionEventTypes.FunctionToolsExecuted, (ev) =>
       logger.info({ tools: ev.functionCalls?.map((c) => c.name) }, "tools"));
     // Her last line has already played, so there is nothing to drain. (A draining
-    // shutdown also waits on the empty reply after end_reading and never ends.)
+    // shutdown also waits on the empty reply after her last line and never ends.)
     // Deleting the room disconnects the kiosk, which then resets.
     state.finish = () => {
       if (state.closing) return;
       state.closing = true;
+      clearTimeout(state.wrap);
+      send({ type: "end" }); // the kiosk hangs up too, in case deleting the room fails
       logger.info("session finished, deleting room");
       ctx.deleteRoom().catch((err) => logger.warn({ err: String(err) }, "deleteRoom failed"));
       session.shutdown({ drain: false });
@@ -224,10 +216,11 @@ export default defineAgent({
       record: false,
     });
 
-    const wrap = setTimeout(() => {
-      if (!state.ending) session.generateReply({ instructions: WRAP_UP });
+    state.wrap = setTimeout(() => {
+      if (!state.ending && !state.closing) session.generateReply({ instructions: WRAP_UP });
     }, MAX_SESSION_MS - 45_000);
-    ctx.addShutdownCallback(async () => clearTimeout(wrap));
+    // The kiosk keeps every card so it can flip them as she names them, even if deal never arrives.
+    send({ type: "cards", cards: state.cards, spreads: SPREADS });
 
     session.generateReply({ instructions: GREETING });
   },
