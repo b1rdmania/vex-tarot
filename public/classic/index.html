@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vex</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=IBM+Plex+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<main id="stage" data-state="asleep">
+  <div class="face-wrap">
+    <div class="mirror" id="mirror">
+      <svg viewBox="0 0 200 250" aria-hidden="true">
+        <path d="M40 250 C40 190 60 170 100 165 C140 170 160 190 160 250 Z" fill="#0c0708"/>
+        <path d="M52 120 C42 60 70 30 100 30 C130 30 158 60 148 120 C150 165 140 190 128 205 L72 205 C60 190 50 165 52 120 Z" fill="#0a0607"/>
+        <ellipse cx="100" cy="102" rx="34" ry="44" fill="#d8cbc0"/>
+        <path d="M64 98 C66 58 90 48 100 50 C116 50 136 60 136 92 C126 74 108 66 86 72 C76 76 68 86 64 98 Z" fill="#0a0607"/>
+        <path d="M82 96 l14 2 M104 98 l14 -2" stroke="#120b0d" stroke-width="3" stroke-linecap="round"/>
+        <ellipse cx="89" cy="101" rx="5" ry="2.6" fill="#120b0d"/>
+        <ellipse cx="111" cy="101" rx="5" ry="2.6" fill="#120b0d"/>
+        <path d="M100 104 l-3 10 h5" stroke="#b9a99c" stroke-width="1.4" fill="none"/>
+        <ellipse id="mouth" cx="100" cy="122" rx="9" ry="2.2" fill="#6b1422"/>
+        <path d="M84 150 l16 8 l16 -8" stroke="#b9955e" stroke-width="1.5" fill="none"/>
+        <circle cx="100" cy="161" r="3" fill="#9b2335"/>
+      </svg>
+    </div>
+  </div>
+
+  <p class="heard" id="heard"></p>
+  <p class="subs" id="subs" aria-live="polite"></p>
+
+  <div class="table" id="table">
+    <div class="deck" id="deck"><i></i><i></i><i></i></div>
+  </div>
+
+  <div class="prompt" id="prompt"></div>
+
+  <button class="wake" id="wake" type="button">Wake Vex</button>
+  <pre class="debug" id="debug" hidden></pre>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

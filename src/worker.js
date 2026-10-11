@@ -7,6 +7,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     try {
+      if (request.method === "POST" && url.pathname === "/api/token") return json(await token(env));
       if (request.method === "POST" && url.pathname === "/api/stt") return json(await stt(request, env));
       if (request.method === "POST" && url.pathname === "/api/roast") return json(await roast(await request.json(), env));
       if (request.method === "POST" && url.pathname === "/api/reading") return json(await reading(await request.json(), env));
@@ -21,6 +22,26 @@ export default {
     return env.ASSETS.fetch(request);
   },
 };
+
+// LiveKit access token for one guest in a fresh room. The token's room config
+// dispatches the `vex` agent worker into that room.
+async function token(env) {
+  const room = `vex-${crypto.randomUUID().slice(0, 8)}`;
+  const now = Math.floor(Date.now() / 1000);
+  const claims = {
+    iss: env.LIVEKIT_API_KEY,
+    sub: `guest-${crypto.randomUUID().slice(0, 6)}`,
+    nbf: now,
+    exp: now + 15 * 60,
+    video: { room, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true },
+    roomConfig: { agents: [{ agentName: env.LIVEKIT_AGENT_NAME || "vex" }] },
+  };
+  const b64 = (v) => btoa(typeof v === "string" ? v : String.fromCharCode(...new Uint8Array(v))).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const body = `${b64(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${b64(JSON.stringify(claims))}`;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.LIVEKIT_API_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  return { url: env.LIVEKIT_URL, room, token: `${body}.${b64(sig)}` };
+}
 
 // Speech to text: raw audio body from the kiosk -> ElevenLabs Scribe.
 async function stt(request, env) {

@@ -1,70 +1,107 @@
 # Vex
 
-Vex is a goth tarot reader for a Halloween party. A guest holds the space bar and asks a question out loud. Vex repeats the question, mocks it, deals three cards and reads them in her own voice.
+Vex is a goth tarot reader for a Halloween party. A guest sits down, presses space and talks to her. Vex asks what they want to know, mocks the question, deals five cards and reads them one at a time. The guest can talk back at any point. A session takes about three minutes.
 
-A reading takes about 70 seconds.
+There are two versions:
 
-## How a reading works
+- **Live** (`/`). A real-time voice session through LiveKit. A video face from HeyGen LiveAvatar is optional.
+- **Classic** (`/classic/`). The first build: push-to-talk, three cards, one question. It needs no LiveKit, so it is the fallback.
 
-1. The guest holds space. The kiosk records the microphone.
-2. The guest lets go. The kiosk sends the audio to `/api/stt` (ElevenLabs Scribe).
-3. The kiosk sends the text to `/api/roast` and `/api/reading` at the same time.
-4. Vex speaks the roast. While she speaks, the server writes the reading.
-5. The deck shuffles for at least 2.5 seconds, then deals three cards face down.
-6. Each card flips. Vex reads it. The next card waits until she stops.
-7. Vex gives a verdict.
+## How a live session works
 
-The server draws the cards with a random number generator. The model reads the cards but does not choose them.
+1. The guest presses space. The kiosk asks `/api/token` for a LiveKit token. The token puts the `vex` agent in a new room.
+2. The agent worker (`agent/agent.js`) joins. Deepgram transcribes the guest, Kimi K3 (on OpenRouter) writes Vex's lines and ElevenLabs speaks them. If `LIVEAVATAR_API_KEY` is set, LiveAvatar renders her face from the same audio.
+3. When Vex has the question, the model calls `deal`. The worker draws the cards with a crypto random number generator. The model does not choose them.
+4. For each card, the model calls `turn_card` and then reads the card. It does not know a card until it turns it.
+5. The worker sends each table event to the kiosk on the `vex` data topic. The kiosk flips a card when her synced subtitles say its name.
+6. After the verdict, the model calls `end_reading`. The worker deletes the room when her last line has played, and the kiosk resets.
+
+A session also ends if the guest is silent for 30 seconds. After 8 minutes Vex is told to wrap up.
 
 ## Run it
 
 You need Node 22 and Wrangler.
 
-1. Create `.dev.vars` with two keys:
+1. Put these keys in `.dev.vars` (the kiosk Worker):
 
    ```
    ELEVENLABS_KEY=...
    OPENROUTER_KEY=...
+   LIVEKIT_URL=wss://...
+   LIVEKIT_API_KEY=...
+   LIVEKIT_API_SECRET=...
    ```
 
-2. Start the server:
+2. Put these keys in `agent/.env` (the agent worker):
 
    ```
-   npm run dev
+   LIVEKIT_URL=wss://...
+   LIVEKIT_API_KEY=...
+   LIVEKIT_API_SECRET=...
+   DEEPGRAM_API_KEY=...
+   ELEVENLABS_KEY=...
+   OPENROUTER_KEY=...
+   LIVEAVATAR_API_KEY=...   # optional; without it Vex is voice only
+   LIVEAVATAR_SANDBOX=1     # 1 = free "Wayne" test avatar, 1-minute sessions
+   LIVEAVATAR_AVATAR_ID=... # your own avatar, used when LIVEAVATAR_SANDBOX=0
    ```
 
-3. Open http://localhost:8787 in Chrome. Click **Wake Vex** and allow the microphone.
+3. Start both:
+
+   ```
+   npm run dev                 # kiosk on http://localhost:8787
+   cd agent && npm run dev     # agent worker
+   ```
+
+4. Open http://localhost:8787 in Chrome, allow the microphone and press space.
 
 ## Controls
 
 | Key | Action |
 | --- | --- |
-| Hold space | Record a question. Let go to send it. |
-| `d` | Show or hide the debug log (timings, transcript). |
-
-After a reading, the full email letter is in `window.lastReading.letter` in the browser console.
+| Space | Start a session. |
+| Escape | End the session now. |
+| `d` | Show or hide the debug log. |
 
 ## Settings
 
-Set these in `wrangler.jsonc` under `vars`.
+The agent reads these from `agent/.env`.
 
 | Name | Default | What it changes |
 | --- | --- | --- |
-| `VOICE_ID` | `X6VIT9ZXy5Nr7EmuLOGz` (Daria) | Vex's voice. Other options: Bella `hbB2qXyS2GMyyZIZyhAH`, Minerva `fgDJOgmENIR82PueQrVs`, Blondie `YDCfZMLWcUmsGvqHq0rS`. |
-| `TTS_SPEED` | `1.15` | Speaking speed, 0.7 to 1.2. |
+| `VOICE_ID` | `X6VIT9ZXy5Nr7EmuLOGz` (Daria) | Vex's ElevenLabs voice. Use a cloned voice for a real person. |
+| `TTS_SPEED` | `1.1` | Speaking speed, 0.7 to 1.2. |
 | `LLM_MODEL` | `moonshotai/kimi-k3` | The model on OpenRouter. Reasoning is off. |
 | `TTS_MODEL` | `eleven_flash_v2_5` | The ElevenLabs voice model. |
-| `STT_MODEL` | `scribe_v1` | The ElevenLabs speech-to-text model. |
+| `VEX_MAX_SESSION_S` | `480` | Session length before Vex wraps up. |
 
-The persona and the output rules are in `src/persona.js`.
+The persona, the spreads and the crisis screen are in `agent/persona.js`.
 
 ## Safety
 
-If a guest talks about self-harm, grief, abuse or a health scare, Vex stops the reading. She says one kind line and gives the Samaritans number. The number is fixed text in `src/worker.js`, not model output. No cards are dealt.
+If a guest talks about self-harm, hopelessness, a death, abuse or a health scare, Vex stops the reading. She says one kind line and gives the Samaritans number. The line is fixed text in `agent/persona.js`, not model output.
+
+Two checks can stop a session:
+
+- A pattern screen on every transcript, including words said while Vex is talking. It runs before the model sees the turn.
+- The model's `crisis` tool, for cases the pattern does not catch.
+
+A false stop costs one reading. A missed one is worse, so the screen is broad.
 
 ## Test
 
-The end-to-end test plays `test/question.wav` into a fake microphone, holds space and saves a screenshot of each stage to `test/shots/`.
+`test/live-e2e.js` runs a live session in headless Chrome. A fake microphone plays a WAV file. The test logs each table event and saves a screenshot when a card flips.
+
+```
+npm run dev                  # in one terminal
+cd agent && npm run dev      # in a second terminal
+CHROME=/path/to/chrome node test/live-e2e.js                 # a full reading
+CHROME=/path/to/chrome WAV=./crisis.wav node test/live-e2e.js  # the crisis stop
+```
+
+Make the WAV files with `say` and `ffmpeg`. They are not in git.
+
+The classic test plays `test/question.wav` into a fake microphone, holds space and saves a screenshot of each stage to `test/shots/`.
 
 ```
 npm run dev            # in one terminal

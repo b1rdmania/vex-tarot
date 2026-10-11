@@ -1,0 +1,38 @@
+/* Live session layout. Shares tokens and card styles with style.css. */
+.live { grid-template-rows: auto auto auto 1fr auto; gap: 1vh; padding-top: 2.5vh; }
+
+.portal {
+  position: relative;
+  height: clamp(220px, 38vh, 520px);
+  aspect-ratio: 3 / 4;
+  border-radius: 999px 999px 14px 14px;
+  border: 2px solid var(--brass);
+  background: radial-gradient(80% 70% at 50% 35%, #3b2329 0%, #1a1013 70%);
+  box-shadow: 0 0 0 6px #120b0d, 0 0 0 7px var(--line), 0 0 60px rgba(185, 149, 94, .12);
+  overflow: hidden;
+  transition: box-shadow .4s;
+}
+.portal video, .portal .stand-in { position: absolute; inset: 0; width: 100%; height: 100%; }
+.portal video { object-fit: cover; opacity: 0; transition: opacity .8s; filter: saturate(.7) contrast(1.08) sepia(.15); }
+.portal.has-video video { opacity: 1; }
+.portal.has-video .stand-in { opacity: 0; }
+.stand-in { transition: opacity .8s; }
+[data-agent="speaking"] .portal { box-shadow: 0 0 0 6px #120b0d, 0 0 0 7px var(--line), 0 0 90px rgba(155, 35, 53, .45); }
+[data-agent="listening"] .portal { box-shadow: 0 0 0 6px #120b0d, 0 0 0 7px var(--blood), 0 0 70px rgba(155, 35, 53, .3); }
+
+.question { min-height: 1.3em; margin: 0; color: var(--ash); font-style: italic; font-size: clamp(14px, 1.3vw, 20px); text-align: center; max-width: 60ch; }
+.live .subs { min-height: 2.6em; max-width: 40ch; font-size: clamp(17px, 1.7vw, 28px); }
+
+/* Up to ten cards: one row for the short spread, two rows of five for the Celtic Cross. */
+.live .table { flex-wrap: wrap; align-content: center; gap: clamp(8px, 1.6vw, 28px); max-width: 1400px; }
+/* Card width is capped by height too, so the spread never runs off a short screen. */
+.live .table[data-count="5"] { --card-w: clamp(80px, min(11vw, 17vh), 170px); }
+.live .table[data-count="10"] { --card-w: clamp(56px, min(7.4vw, 8.6vh), 118px); row-gap: 10px; }
+.live .table .break { flex-basis: 100%; height: 0; }
+.live .pos { opacity: 1; font-size: 10.5px; letter-spacing: .12em; text-align: center; min-height: 2.4em; }
+.live .slot .name { font-size: clamp(11px, .9vw, 15px); color: var(--wax); text-align: center; min-height: 1.3em; opacity: 0; transition: opacity .5s .6s; }
+.live .card.flipped ~ .name { opacity: 1; }
+
+.live .prompt kbd { margin: 0 .2em; }
+[data-state="session"] .prompt { visibility: hidden; }
+[data-state="idle"] .prompt { animation: breathe 3s ease-in-out infinite; }

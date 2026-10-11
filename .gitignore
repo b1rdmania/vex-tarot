@@ -4,3 +4,7 @@ node_modules/
 _download/
 _auditions/
 test/shots/
+.env
+agent/node_modules/
+test/guest.wav
+test/crisis.wav
