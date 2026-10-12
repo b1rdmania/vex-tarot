@@ -11,7 +11,7 @@ import * as liveavatar from "@livekit/agents-plugin-liveavatar";
 import * as openai from "@livekit/agents-plugin-openai";
 import * as silero from "@livekit/agents-plugin-silero";
 import OpenAI from "openai";
-import { advance, readingStart, lastSentence } from "../public/spoken.js";
+import { advance, readingUnderway, lastSentence } from "../public/spoken.js";
 import { CRISIS_LINE, CRISIS_PATTERN, GREETING, INSTRUCTIONS, SPREADS, WRAP_UP } from "./persona.js";
 
 const DECK = JSON.parse(readFileSync(new URL("../src/deck.json", import.meta.url), "utf8"));
@@ -207,11 +207,12 @@ export default defineAgent({
       }
       if (item.role !== "assistant" || state.closing) return;
       const text = item.textContent || "";
-      // Speech is only a fallback for a failed tool call after the opening gate,
-      // and only an explicit table announcement can enter the reading phase.
-      if (!state.ending && !state.spread && state.ready) {
-        const announced = readingStart(text);
+      // Speech is a fallback for a failed or refused deal call. Only an explicit table
+      // announcement enters the reading; before the gate it must also name the first card.
+      if (!state.ending && !state.spread) {
+        const announced = readingUnderway(text, state.cards, SPREADS, state.ready);
         if (announced) {
+          state.ready = true;
           state.spread = announced;
           state.phase = "reading";
           send({ type: "deal", spread: announced });

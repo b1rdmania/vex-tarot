@@ -85,8 +85,8 @@ test("five-card laptop reading preserves verdict then resets for next guest", as
   const page = await pageFor(t);
   await shot(page, "laptop-idle");
   await start(page); await ready(page);
-  await say(page, "The cards are on the table. The Fool, upright.");
-  assert.equal(await page.locator(".slot").count(), 0, "opening gate blocks even deliberate announcements");
+  await say(page, "The cards are on the table.");
+  assert.equal(await page.locator(".slot").count(), 0, "a bare announcement before the gate does not deal");
   await event(page, { type: "reading-ready" });
   await say(page, "Welcome to my world. This is a strength of yours.");
   assert.equal(await page.locator(".slot").count(), 0);
@@ -185,4 +185,13 @@ test("starting a real session stops the scripted demo", async t => {
   await page.clock.runFor(70_000);
   assert.equal(await page.getByRole("button", { name: "Leave" }).isVisible(), true, "demo did not swap in its own controls");
   assert.equal(await page.getByRole("button", { name: "Next guest" }).count(), 0);
+});
+test("a reading Vex starts before the gate still deals and flips the table", async t => {
+  const page = await pageFor(t);
+  await start(page); await ready(page);
+  await say(page, `So, the question is money. Right. The cards are on the table. ${cards[0].name}, upright. This is the heart of it.`);
+  assert.equal(await page.locator(".slot").count(), 5);
+  assert.equal(await page.locator(".card.flipped").count(), 1);
+  await say(page, `${cards[1].name}, reversed. Oh dear.`);
+  assert.equal(await page.locator(".card.flipped").count(), 2);
 });
