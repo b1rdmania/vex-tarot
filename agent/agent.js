@@ -256,7 +256,8 @@ export default defineAgent({
       state.finish();
     }, MAX_SESSION_MS);
 
-    const avatarKey = env("LIVEAVATAR_API_KEY");
+    // Vex is drawn in the kiosk, so the HeyGen face is off unless VEX_AVATAR=1.
+    const avatarKey = env("VEX_AVATAR") === "1" && env("LIVEAVATAR_API_KEY");
     if (avatarKey) {
       const sandbox = env("LIVEAVATAR_SANDBOX", "1") === "1";
       const avatar = new StoppableAvatar({

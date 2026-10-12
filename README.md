@@ -10,7 +10,7 @@ There are two versions:
 ## How a live session works
 
 1. The guest presses space. The kiosk asks `/api/token` for a LiveKit token. The token puts the `vex` agent in a new room.
-2. The agent worker (`agent/agent.js`) joins. Deepgram transcribes the guest, Kimi K3 (on OpenRouter) writes Vex's lines and ElevenLabs speaks them. If `LIVEAVATAR_API_KEY` is set, LiveAvatar renders her face from the same audio.
+2. The agent worker (`agent/agent.js`) joins. Deepgram transcribes the guest, Kimi K3 (on OpenRouter) writes Vex's lines and ElevenLabs speaks them. The kiosk draws Vex as a cartoon whose mouth follows her voice. The LiveAvatar face is off unless `VEX_AVATAR=1` and `LIVEAVATAR_API_KEY` are both set.
 3. Before she speaks, the worker draws ten cards with a crypto random number generator and puts them in her instructions. The model does not choose them. The kiosk gets the same list.
 4. When Vex has the question, the model calls `deal` with the spread (five cards, or the Celtic Cross if asked). The kiosk lays the cards face down.
 5. She announces that the cards are on the table, then reads them in order. A card flips only on its full name plus orientation, such as “The Sun, upright.” The kiosk enlarges the active card beside her mirror. If `deal` fails, the explicit table announcement can start the short spread or Celtic Cross after at least four guest turns (or a request to hurry). Casual card references during the opening do nothing.
@@ -41,7 +41,8 @@ You need Node 22 and Wrangler.
    DEEPGRAM_API_KEY=...
    ELEVENLABS_KEY=...
    OPENROUTER_KEY=...
-   LIVEAVATAR_API_KEY=...   # optional; without it Vex is voice only
+   VEX_AVATAR=0             # 1 = use the LiveAvatar face below instead of voice only
+   LIVEAVATAR_API_KEY=...   # optional; only used when VEX_AVATAR=1
    LIVEAVATAR_SANDBOX=0     # 1 = free "Wayne" test avatar, 1-minute sessions, no credits
    LIVEAVATAR_AVATAR_ID=... # used when LIVEAVATAR_SANDBOX=0; Ella (Disinterested) is 4c9a4e2d-67df-465a-b6ca-4199b26cebb9
    ```

@@ -264,7 +264,7 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     if (!state.persistent && state.speech.length && now > state.speechUntil) state.speech = [];
     if (!state.speech.length && state.idleLines && now > state.idleNext) {
       const line = idle.lines[state.idleIndex++ % idle.lines.length];
-      say(line, { mime: true });
+      say(line);
       state.idleNext = state.speechUntil + 1200;
     }
     state.speech.forEach((line, i) => text(line, speechRect.x + speechRect.width / 2, speechRect.y + room.speech.padding + i * 9, C.speech, { align: "center" }));
