@@ -175,15 +175,18 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     if (card.face.reversed) { ctx.save(); ctx.translate(x + w, y + h); ctx.rotate(Math.PI); ctx.drawImage(img, 0, 0, w, h); ctx.restore(); }
     else ctx.drawImage(img, x, y, w, h);
   }
-  // Table flip: the back narrows to its edge, then the face widens, in stepped
-  // widths so it reads as pixel animation. Centred on faceAt; the card lifts 2px.
-  const FLIP_MS = 180;
+  // Flip: the back narrows to its edge over FLIP_MS, then the face widens over FLIP_MS,
+  // in stepped widths so it reads as pixel animation. Centred on faceAt; the card lifts 2px.
+  // Used for the small table card and the large reveal, one after the other.
+  const FLIP_MS = 300, FLIP_STEPS = 6;
+  function flipWidth(t, w) {
+    if (Math.abs(t) >= FLIP_MS) return w;
+    return Math.max(2, Math.round(w * Math.max(0.08, Math.round((Math.abs(t) / FLIP_MS) * FLIP_STEPS) / FLIP_STEPS)));
+  }
   function flipCard(card, size, x, y, now) {
     const t = card.face ? now - card.faceAt : Infinity;
     if (Math.abs(t) >= FLIP_MS) { drawCard(card, size, x, y, now); return; }
-    const [w] = CARD[size];
-    const f = Math.max(0.12, Math.round((Math.abs(t) / FLIP_MS) * 4) / 4);
-    const sw = Math.max(2, Math.round(w * f));
+    const [w] = CARD[size], sw = flipWidth(t, w);
     ctx.save();
     ctx.translate(x + Math.floor((w - sw) / 2), y - 2);
     ctx.scale(sw / w, 1);
@@ -204,17 +207,13 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
 
   function drawReveal(now) {
     const r = state.reveal;
-    if (!r || now > r.until) return;
-    const [w, h] = CARD.lg;
-    const t = now - r.start;
-    // Three-step pop: a narrow sliver, half width, full card.
-    const step = t < 60 ? 0.2 : t < 120 ? 0.55 : 1;
-    const sw = Math.max(2, Math.round(w * step));
-    const x = r.x + Math.floor((w - sw) / 2);
-    ctx.fillStyle = colour(C.ink); ctx.fillRect(x - 2, r.y - 2, sw + 4, h + 4);
-    ctx.fillStyle = colour(C.gold); ctx.fillRect(x - 1, r.y - 1, sw + 2, h + 2);
-    if (step < 1) { ctx.fillStyle = colour(C.back); ctx.fillRect(x, r.y, sw, h); return; }
-    drawCard({ face: r.card, faceAt: 0 }, "lg", r.x, r.y, now);
+    // The large card appears face down as the table card lands, then flips the same way.
+    if (!r || now < r.faceAt - FLIP_MS || now > r.until) return;
+    const [w, h] = CARD.lg, sw = flipWidth(now - r.faceAt, w);
+    const x = r.x + Math.floor((w - sw) / 2), y = Math.abs(now - r.faceAt) < FLIP_MS ? r.y - 2 : r.y;
+    ctx.fillStyle = colour(C.ink); ctx.fillRect(x - 2, y - 2, sw + 4, h + 4);
+    ctx.fillStyle = colour(C.gold); ctx.fillRect(x - 1, y - 1, sw + 2, h + 2);
+    flipCard({ face: r.card, faceAt: r.faceAt }, "lg", r.x, r.y, now);
   }
 
   // Bottom row: a wide type box (Codex's first two slots) and Leave. Before a reading,
@@ -311,12 +310,13 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
       const slot = state.spread[i];
       if (!slot) return;
       const now = performance.now(), box = slots()[i], deal = sheet.animations.deal.durationsMs;
-      const faceAt = now + deal[0] + deal[1];
+      // The table flip starts as the hand turns the card; the large card flips once it lands.
+      const faceAt = now + deal[0] + deal[1] + FLIP_MS, revealAt = faceAt + 2 * FLIP_MS;
       slot.face = card; slot.faceAt = faceAt;
       state.lit = i;
       state.hand = { start: now, x: box.x + Math.floor(box.w / 2), y: box.y + Math.floor(box.h / 2) };
       const [w] = CARD.lg, right = sprite.x + sprite.width / 2 <= W / 2;
-      state.reveal = { card, start: faceAt, until: faceAt + 3600, x: right ? sprite.x + sprite.width + 14 : sprite.x - 14 - w, y: 34 };
+      state.reveal = { card, faceAt: revealAt, until: revealAt + 3600, x: right ? sprite.x + sprite.width + 14 : sprite.x - 14 - w, y: 34 };
       this.react(card.reversed ? "unimpressed" : "dramatic");
     },
     clearCards() { state.spread = []; state.lit = -1; state.hand = null; state.reveal = null; },
