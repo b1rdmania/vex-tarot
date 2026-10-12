@@ -27,9 +27,14 @@ for (const item of scene.room.controlItems) {
   el.addEventListener("pointerenter", on); el.addEventListener("focus", on);
   el.addEventListener("pointerleave", off); el.addEventListener("blur", off);
 }
+// Fill the screen. Above x4 the slight unevenness of a fractional scale is invisible.
 function fit() {
   const room = Math.min(innerWidth / 320, innerHeight / 212);
-  frame.style.setProperty("--scale", room >= 2 ? Math.floor(room) : room.toFixed(3));
+  frame.style.setProperty("--scale", room >= 2 && room < 4 ? Math.floor(room) : room.toFixed(3));
+}
+function fullscreen(on = !document.fullscreenElement) {
+  if (on && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+  if (!on && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
 }
 fit();
 addEventListener("resize", fit);
@@ -59,15 +64,16 @@ function clearTimers(run) { for (const timer of run.timers) clearTimeout(timer);
 
 addEventListener("keydown", (event) => {
   const interactive = event.target.closest?.("button, a, input, textarea, select");
-  if (event.code === "Space" && !event.repeat && !interactive && stage.dataset.state === "idle") { event.preventDefault(); start(); }
+  if (event.code === "Space" && !event.repeat && !interactive && stage.dataset.state === "idle") { event.preventDefault(); fullscreen(true); start(); }
   if (event.key === "d" && !interactive) debug.hidden = !debug.hidden;
+  if (event.key === "f" && !interactive) fullscreen();
   if (scene.inspecting && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); scene.focusCard(event.key === "ArrowLeft" ? -1 : 1); }
   if (event.key === "Escape") {
     if (scene.inspecting) { scene.inspect(false); syncInspect(); }
     else if (current && !current.closing) finish(current, "cancelled");
   }
 });
-buttons.talk.addEventListener("click", () => { if (stage.dataset.state !== "idle") reset(); start(); });
+buttons.talk.addEventListener("click", () => { fullscreen(true); if (stage.dataset.state !== "idle") reset(); start(); });
 buttons.inspect.addEventListener("click", () => { scene.inspect(); syncInspect(); });
 buttons.leave.addEventListener("click", () => { if (current && !current.closing) finish(current, "cancelled"); else reset(); });
 canvas.addEventListener("click", (event) => {
