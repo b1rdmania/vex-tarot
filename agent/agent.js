@@ -136,8 +136,9 @@ class Vex extends voice.Agent {
 
 export default defineAgent({
   prewarm: async (proc) => {
-    // A little stricter than the defaults (0.5, 50 ms) so a laugh doesn't count as a turn.
-    proc.userData.vad = await silero.VAD.load({ activationThreshold: 0.55, minSpeechDuration: 100 });
+    // Stricter than the defaults (0.5, 50 ms) so a laugh, a cough or room noise doesn't count as a turn.
+    // 12 Oct: 0.55/100 ms still let small noises interrupt her in a quiet room.
+    proc.userData.vad = await silero.VAD.load({ activationThreshold: 0.65, minSpeechDuration: 200 });
   },
   entry: async (ctx) => {
     const logger = log();
@@ -162,7 +163,7 @@ export default defineAgent({
       turnHandling: {
         turnDetection: "vad",
         // A party is loud. Only a deliberate interruption should cut her off.
-        interruption: { minDuration: 600, minWords: 1, resumeFalseInterruption: true },
+        interruption: { minDuration: 900, minWords: 2, resumeFalseInterruption: true },
         // Wait for a real pause before she answers, so she doesn't jump in mid-sentence.
         endpointing: { minDelay: 900, maxDelay: 3500 },
       },

@@ -177,6 +177,21 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     if (card.face.reversed) { ctx.save(); ctx.translate(x + w, y + h); ctx.rotate(Math.PI); ctx.drawImage(img, 0, 0, w, h); ctx.restore(); }
     else ctx.drawImage(img, x, y, w, h);
   }
+  // Table flip: the back narrows to its edge, then the face widens, in stepped
+  // widths so it reads as pixel animation. Centred on faceAt; the card lifts 2px.
+  const FLIP_MS = 180;
+  function flipCard(card, size, x, y, now) {
+    const t = card.face ? now - card.faceAt : Infinity;
+    if (Math.abs(t) >= FLIP_MS) { drawCard(card, size, x, y, now); return; }
+    const [w] = CARD[size];
+    const f = Math.max(0.12, Math.round((Math.abs(t) / FLIP_MS) * 4) / 4);
+    const sw = Math.max(2, Math.round(w * f));
+    ctx.save();
+    ctx.translate(x + Math.floor((w - sw) / 2), y - 2);
+    ctx.scale(sw / w, 1);
+    drawCard(t >= 0 ? { face: card.face, faceAt: 0 } : { face: null }, size, 0, 0, now);
+    ctx.restore();
+  }
   function outline(r, index) { ctx.fillStyle = colour(index); ctx.fillRect(r.x - 1, r.y - 1, r.w + 2, 1); ctx.fillRect(r.x - 1, r.y + r.h, r.w + 2, 1); ctx.fillRect(r.x - 1, r.y, 1, r.h); ctx.fillRect(r.x + r.w, r.y, 1, r.h); }
 
   function drawHand(now) {
@@ -247,7 +262,7 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     frame(bodyFrame(now), sprite.x, sprite.y);
     frame(mouthFrame(now), sprite.x, sprite.y);
     const boxes = slots();
-    state.spread.forEach((card, i) => { drawCard(card, tableSize(), boxes[i].x, boxes[i].y, now); if (i === state.lit && now >= card.faceAt) outline(boxes[i], C.hover); });
+    state.spread.forEach((card, i) => { flipCard(card, tableSize(), boxes[i].x, boxes[i].y, now); if (i === state.lit && now >= card.faceAt) outline(boxes[i], C.hover); });
     drawHand(now);
     drawReveal(now);
     if (state.label) text(state.label.slice(0, 52), W / 2, Math.min(room.rects.table.y + room.rects.table.height, room.rects.controls.y - 9), C.gold, { align: "center" });
