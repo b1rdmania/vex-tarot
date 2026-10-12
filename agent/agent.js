@@ -19,7 +19,7 @@ const SANDBOX_AVATAR = "dd73ea75-1218-4ef3-92ce-606d5f7fbc0a"; // "Wayne", the o
 const env = (k, d) => process.env[k] || d;
 const TYPING_GRACE_MS = 45_000;
 const MAX_TYPED_CHARS = 500;
-const MIN_GUEST_TURNS = Number(env("VEX_MIN_GUEST_TURNS", "4"));
+const MIN_GUEST_TURNS = Number(env("VEX_MIN_GUEST_TURNS", "2"));
 const MAX_SESSION_MS = Number(env("VEX_MAX_SESSION_S", "480")) * 1000;
 
 // K3 reasons by default, which adds ~10 s a turn. The plugin has no field for
