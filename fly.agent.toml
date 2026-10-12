@@ -1,0 +1,12 @@
+# One always-on machine. It has no public port: it dials out to LiveKit Cloud,
+# which sends it each session. Deploy: fly deploy -c fly.agent.toml
+app = "vex-agent"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile.agent"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 1024

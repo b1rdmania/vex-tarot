@@ -118,5 +118,7 @@ The kiosk runs on Cloudflare Workers at https://vex-tarot.andy-ff7.workers.dev. 
 
 Every API call spends money, so the API needs `ACCESS_CODE`. Share the link as `/?code=...`. The kiosk keeps the code for reloads.
 
-The agent worker still runs on the laptop (`cd agent && npm run dev`). LiveKit Cloud sends each session to it. When the laptop sleeps, the site loads but Vex does not join.
+The agent worker runs on Fly as `vex-agent` (one machine in London, always on). Deploy with `fly deploy -c fly.agent.toml`. Its keys are Fly secrets, imported from `agent/.env`. It has no public port: it connects out to LiveKit Cloud, which sends it each session.
+
+To work on the agent locally, run `cd agent && npm run dev`. LiveKit sends sessions to any worker registered as `vex`, so stop the Fly machine first (`fly scale count 0 -c fly.agent.toml`), or the two will share sessions.
 
