@@ -87,8 +87,8 @@ typeBox.addEventListener("blur", () => scene.typing({ focused: false }));
 typeBox.addEventListener("input", () => {
   scene.typing({ value: typeBox.value });
   const run = current;
-  if (!run?.room || run.closing || performance.now() - (run.typedAt || -Infinity) < TYPING_PING_MS) return;
-  run.typedAt = performance.now();
+  if (!run?.room || run.closing || performance.now() - (run.pingedAt || -Infinity) < TYPING_PING_MS) return;
+  run.pingedAt = performance.now();
   Promise.resolve(run.room.localParticipant.publishData(new TextEncoder().encode('{"type":"typing"}'), { reliable: true, topic: "vex-guest" })).catch(() => {});
 });
 typeBox.addEventListener("keydown", (event) => {
@@ -98,6 +98,7 @@ typeBox.addEventListener("keydown", (event) => {
   if (!text || !run?.room || run.closing || crisis) return;
   typeBox.value = "";
   scene.typing({ value: "" });
+  run.typedAt = performance.now();
   scene.say(text, { guest: true });
   Promise.resolve(run.room.localParticipant.sendText(text, { topic: "lk.chat" })).catch(() => log("typed message failed"));
   log("typed", text.length, "chars");
@@ -220,6 +221,7 @@ function wire(run) {
   room.registerTextStreamHandler("lk.transcription", async (reader, from) => {
     if (!active() || from.identity === room.localParticipant.identity) return;
     let text = "";
+    const opened = performance.now();
     try {
       for await (const chunk of reader) {
         if (!active()) return;
@@ -227,7 +229,8 @@ function wire(run) {
         agentArrived(run);
         subs.textContent = tail(text);
         if (crisis) continue;
-        scene.say(text);
+        // A line she was cut off in must not cover what the guest just typed.
+        if (!(run.typedAt > opened)) scene.say(text);
         if (!spread && ready) {
           const announced = readingStart(text);
           if (announced) deal(run, announced);

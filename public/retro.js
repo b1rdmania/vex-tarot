@@ -222,7 +222,7 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
   function typedLabel(rect) {
     const t = state.typing;
     if (!t.enabled || (!t.value && !t.focused)) return "Type to Vex";
-    const caret = t.focused && Math.floor(performance.now() / 500) % 2 ? "_" : " ";
+    const caret = t.focused && (!t.value || Math.floor(performance.now() / 500) % 2) ? "_" : " ";
     const room = Math.floor(rect.width / 6) - 3;
     return `> ${normalise(t.value).slice(-room)}${caret}`;
   }
