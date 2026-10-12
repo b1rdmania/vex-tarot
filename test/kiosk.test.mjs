@@ -44,7 +44,7 @@ async function pageFor(t, options = {}) {
 const event = (page, msg) => page.evaluate(msg => window.__vexMock.event(msg), msg);
 const say = (page, text) => page.evaluate(text => window.__vexMock.say(text), text);
 async function start(page) {
-  await page.getByRole("button", { name: "Take a seat" }).click();
+  await page.getByRole("button", { name: "Talk to Vex" }).click();
   await page.waitForFunction(() => window.__vexMock.rooms.length === 1);
 }
 async function ready(page) { await event(page, { type: "cards", cards, spreads }); await event(page, { type: "state", state: "listening" }); }
@@ -70,7 +70,7 @@ test("denied microphone disconnects, displays a visible error, and can retry", a
 });
 test("bad access code gives a visible recovery message", async t => {
   const page = await pageFor(t, { status: 401 });
-  await page.getByRole("button", { name: "Take a seat" }).click();
+  await page.getByRole("button", { name: "Talk to Vex" }).click();
   await page.getByRole("button", { name: "Try again" }).waitFor();
   assert.match(await page.locator("#intro").innerText(), /valid access code/);
 });
@@ -92,19 +92,18 @@ test("five-card laptop reading preserves verdict then resets for next guest", as
   assert.equal(await page.locator(".slot").count(), 0);
   await say(page, "The cards are on the table.");
   assert.equal(await page.locator(".slot").count(), 5);
-  await page.getByRole("button", { name: "Captions off" }).click();
   for (let i = 0; i < 5; i++) await say(page, `${cards[i].name}, ${cards[i].reversed ? "reversed" : "upright"}. Take a chance.`);
   await page.clock.runFor(1500);
   assert.equal(await page.locator(".card.flipped").count(), 5);
   assert.equal(await page.locator("#hero-name").innerText(), cards[4].name);
-  assert.equal(await page.locator("#subs").isVisible(), true);
+  assert.match(await page.locator("#subs").textContent(), /Take a chance/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await shot(page, "laptop-reading");
   assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, "laptop reading fits vertically");
   await event(page, { type: "verdict", text: "Make the call." });
   await event(page, { type: "end", reason: "complete", verdict: "Make the call." });
   assert.equal(await page.locator("#verdict").innerText(), "Make the call.");
-  assert.equal(await page.locator("#afterword").isVisible(), true);
+  assert.equal(await page.locator("#afterword").isHidden(), false);
   await shot(page, "laptop-verdict");
   assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, "laptop verdict fits vertically");
   await page.clock.fastForward(31_000);
@@ -145,7 +144,7 @@ test("mobile layout remains usable without horizontal overflow", async t => {
   await say(page, `${cards[0].name}, upright. Take a chance.`);
   await page.clock.runFor(1500);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  assert.equal(await page.getByRole("button", { name: "End reading" }).isVisible(), true);
+  assert.equal(await page.getByRole("button", { name: "Leave" }).isVisible(), true);
   await shot(page, "phone-reading");
 });
 
@@ -164,4 +163,17 @@ test("Celtic announcement chooses ten cards without a tool event", async t => {
   await event(page, { type: "reading-ready" });
   await say(page, "The Celtic Cross is on the table.");
   assert.equal(await page.locator(".slot").count(), 10);
+});
+test("inspect opens over the room and Escape closes it without ending the reading", async t => {
+  const page = await pageFor(t);
+  assert.equal(await page.getByRole("button", { name: "Inspect your cards" }).isDisabled(), true);
+  await start(page); await ready(page);
+  await event(page, { type: "deal", spread: "short" });
+  await say(page, `${cards[0].name}, upright. Take a chance.`);
+  await page.getByRole("button", { name: "Inspect your cards" }).click();
+  await page.getByRole("button", { name: "Back to Vex" }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Inspect your cards" }).waitFor();
+  assert.equal(await page.locator("#stage").getAttribute("data-phase"), "reading");
+  assert.equal(await page.evaluate(() => window.__vexMock.disconnects), 0);
 });

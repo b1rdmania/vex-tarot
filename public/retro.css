@@ -1,0 +1,33 @@
+/* The canvas carries the look. This file only sizes it, lays real buttons over
+   the drawn controls, and keeps the crisis notice readable. */
+:root { --ink: #100e18; --bone: #e4d7b8; --gold: #e8ae64; --rose: #c6a5b7; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: var(--ink); color: var(--bone); }
+body { display: grid; place-items: center; overflow: hidden; font: 16px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+main { display: contents; }
+
+/* live.js sets --scale: whole steps (x2, x3, x4) when they fit, fractional below x2. */
+.frame { position: relative; width: calc(320px * var(--scale, 3)); height: calc(212px * var(--scale, 3)); }
+#scene { display: block; width: 100%; height: 100%; image-rendering: pixelated; cursor: default; }
+
+/* Buttons sit exactly over the drawn labels (room JSON rects, 320x212 space). The canvas draws the text. */
+.controls button {
+  position: absolute; padding: 0; border: 0; background: transparent; color: transparent; font: inherit; cursor: pointer;
+  left: calc(var(--x) / 320 * 100%); top: calc(var(--y) / 212 * 100%);
+  width: calc(var(--w) / 320 * 100%); height: calc(var(--h) / 212 * 100%);
+}
+.controls button:disabled { cursor: default; }
+.controls button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+/* Crisis only: plain, large, high-contrast text over the dimmed room. */
+.notice {
+  position: absolute; inset: 12% 10% 14%; display: grid; align-content: center; gap: .6em; padding: 1.5em 2em;
+  background: var(--ink); border: 2px solid var(--gold); text-align: center;
+}
+.notice .eyebrow { margin: 0; color: var(--rose); letter-spacing: .08em; text-transform: uppercase; font-size: .8em; }
+.notice h1 { margin: 0; font-size: 1.6em; font-weight: 400; }
+.notice p { margin: 0; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.debug { position: fixed; left: 8px; bottom: 8px; max-width: 40ch; max-height: 40vh; overflow: auto; margin: 0; padding: 8px; background: #000c; color: #9b7898; font-size: 11px; }

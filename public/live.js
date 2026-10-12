@@ -1,49 +1,79 @@
 import { Room, RoomEvent, Track } from "./vendor/livekit-client.esm.mjs";
 import { advance, readingStart } from "./spoken.js";
+import { createScene } from "./retro.js";
 
 const $ = (id) => document.getElementById(id);
-const stage = $("stage"), portal = $("portal"), face = $("face"), table = $("table");
-const subs = $("subs"), question = $("question"), prompt = $("prompt"), debug = $("debug");
+const stage = $("stage"), frame = $("frame"), canvas = $("scene"), table = $("table");
+const subs = $("subs"), question = $("question"), debug = $("debug"), notice = $("notice");
+const buttons = { talk: $("talk"), inspect: $("inspect"), leave: $("leave") };
 const RESET_AFTER_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 35_000;
+const FOOTNOTE = "An AI in a mirror. For entertainment.";
+const params = new URLSearchParams(location.search);
 const store = { get(key) { try { return localStorage.getItem(key); } catch { return null; } }, set(key, value) { try { localStorage.setItem(key, value); } catch {} } };
-const accessCode = new URLSearchParams(location.search).get("code") || store.get("vexCode") || "";
+const accessCode = params.get("code") || store.get("vexCode") || "";
 if (accessCode) store.set("vexCode", accessCode);
 let current = null;
 let started = 0;
-let captions = store.get("vexCaptions") === "1";
 let deck = null, spread = null, positions = null, flipped = 0;
 let ready = false, crisis = false, verdict = "";
+
+const scene = await createScene(canvas, params.get("room") || undefined);
+for (const item of scene.room.controlItems) {
+  const el = buttons[item.id];
+  if (!el) continue;
+  for (const [k, v] of Object.entries({ x: item.rect.x, y: item.rect.y, w: item.rect.width, h: item.rect.height })) el.style.setProperty(`--${k}`, v);
+  const on = () => scene.hover(item.id), off = () => scene.hover(null);
+  el.addEventListener("pointerenter", on); el.addEventListener("focus", on);
+  el.addEventListener("pointerleave", off); el.addEventListener("blur", off);
+}
+function fit() {
+  const room = Math.min(innerWidth / 320, innerHeight / 212);
+  frame.style.setProperty("--scale", room >= 2 ? Math.floor(room) : room.toFixed(3));
+}
+fit();
+addEventListener("resize", fit);
 
 function log(...args) {
   const line = `${((performance.now() - started) / 1000).toFixed(1)}s ${args.join(" ")}`;
   console.log("[vex]", line);
   debug.textContent = `${line}\n${debug.textContent}`.slice(0, 6000);
 }
-function status(text) { $("status-text").textContent = text; }
+function status(text) { $("status-text").textContent = text; scene.status(text); }
 function phase(name) { stage.dataset.phase = name; }
+// One place sets the three controls, for both the canvas and the real buttons.
+function controls({ talk = null, talkOn = true, inspect = false, leave = null }) {
+  buttons.talk.hidden = !talk; buttons.talk.textContent = talk || ""; buttons.talk.disabled = !talkOn;
+  buttons.inspect.disabled = !inspect;
+  buttons.leave.hidden = !leave; buttons.leave.textContent = leave || "";
+  scene.controls({ talk, talkOn, inspect, leave });
+  syncInspect();
+}
+function syncInspect() { buttons.inspect.textContent = scene.inspecting ? "Back to Vex" : "Inspect your cards"; }
 function schedule(run, callback, delay) {
   const timer = setTimeout(() => { run.timers.delete(timer); if (current === run) callback(); }, delay);
   run.timers.add(timer);
   return timer;
 }
 function clearTimers(run) { for (const timer of run.timers) clearTimeout(timer); run.timers.clear(); }
-function setCaptions() {
-  $("captions").textContent = captions ? "Captions on" : "Captions off";
-  $("captions").setAttribute("aria-pressed", String(captions));
-  subs.hidden = !captions;
-}
-setCaptions();
-$("captions").addEventListener("click", () => { captions = !captions; store.set("vexCaptions", captions ? "1" : "0"); setCaptions(); });
+
 addEventListener("keydown", (event) => {
   const interactive = event.target.closest?.("button, a, input, textarea, select");
   if (event.code === "Space" && !event.repeat && !interactive && stage.dataset.state === "idle") { event.preventDefault(); start(); }
   if (event.key === "d" && !interactive) debug.hidden = !debug.hidden;
-  if (event.key === "Escape" && current && !current.closing) finish(current, "cancelled");
+  if (scene.inspecting && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); scene.focusCard(event.key === "ArrowLeft" ? -1 : 1); }
+  if (event.key === "Escape") {
+    if (scene.inspecting) { scene.inspect(false); syncInspect(); }
+    else if (current && !current.closing) finish(current, "cancelled");
+  }
 });
-prompt.addEventListener("click", start);
-$("end").addEventListener("click", () => current && finish(current, "cancelled"));
-$("again").addEventListener("click", reset);
+buttons.talk.addEventListener("click", () => { if (stage.dataset.state !== "idle") reset(); start(); });
+buttons.inspect.addEventListener("click", () => { scene.inspect(); syncInspect(); });
+buttons.leave.addEventListener("click", () => { if (current && !current.closing) finish(current, "cancelled"); else reset(); });
+canvas.addEventListener("click", (event) => {
+  const box = canvas.getBoundingClientRect();
+  scene.pick(scene.cardAt((event.clientX - box.left) * 320 / box.width, (event.clientY - box.top) * 212 / box.height));
+});
 
 function release(run) {
   if (!run || run.closing) return;
@@ -56,9 +86,6 @@ function release(run) {
   run.audio.forEach((el) => el.remove());
   run.audio.clear();
   Promise.resolve(run.room?.disconnect()).catch(() => {});
-  face.srcObject = null;
-  portal.classList.remove("has-video");
-  portal.style.removeProperty("--voice");
 }
 function reset() {
   release(current);
@@ -70,17 +97,12 @@ function reset() {
   delete table.dataset.count;
   delete stage.dataset.agent;
   question.textContent = subs.textContent = debug.textContent = "";
-  $("reading-focus").hidden = $("afterword").hidden = true;
-  $("invitation").hidden = false;
-  $("end").hidden = $("again").hidden = true;
-  $("chapter").textContent = "A private audience";
-  $("headline").innerHTML = "Your future.<br>My condolences.";
-  $("intro").innerHTML = "Sit close. Tell me what’s on your mind.<br>I’ll consult the cards. And judge you a little.";
-  prompt.textContent = "Take a seat ↗";
-  prompt.hidden = $("hint").hidden = false;
+  $("reading-focus").hidden = $("afterword").hidden = notice.hidden = true;
+  scene.clearCards(); scene.label(""); scene.dim(false); scene.say(""); scene.idle(true); scene.footnote(FOOTNOTE);
   stage.dataset.state = "idle";
   phase("idle");
-  status("Ready when you are.");
+  controls({ talk: "Talk to Vex" });
+  status("");
 }
 function fail(run, message) {
   if (current !== run || run.closing) return;
@@ -88,14 +110,14 @@ function fail(run, message) {
   stage.dataset.state = "idle";
   phase("error");
   $("reading-focus").hidden = $("afterword").hidden = true;
-  $("invitation").hidden = false;
   $("chapter").textContent = "A disturbance in the connection";
   $("headline").textContent = "The spirits are offline.";
   $("intro").textContent = message;
-  prompt.textContent = "Try again ↗";
-  prompt.hidden = false;
-  $("hint").hidden = $("end").hidden = true;
-  status(message);
+  scene.clearCards(); scene.label("");
+  scene.say(message, { persistent: true });
+  scene.react("unimpressed");
+  controls({ talk: "Try again" });
+  status("The spirits are offline.");
 }
 async function start() {
   if (stage.dataset.state !== "idle") return;
@@ -105,11 +127,11 @@ async function start() {
   current = run;
   stage.dataset.state = "session";
   phase("connecting");
-  prompt.hidden = $("hint").hidden = true;
-  $("end").hidden = false;
-  $("headline").textContent = "One moment, mortal.";
+  scene.idle(false); scene.footnote("");
+  scene.say("One moment, mortal.", { mime: true });
+  controls({ talk: "Talk to Vex", talkOn: false, leave: "Leave" });
   $("intro").textContent = "Allow your microphone when asked. Sit close and speak normally.";
-  status("Connecting to Vex…");
+  status("Allow your microphone. Connecting...");
   run.watchdog = schedule(run, () => fail(run, "Vex hasn’t answered. Check your connection and try again."), CONNECT_TIMEOUT_MS);
   try {
     const res = await fetch("/api/token", { method: "POST", headers: { "X-Vex-Code": accessCode }, signal: run.abort.signal });
@@ -125,7 +147,7 @@ async function start() {
     run.micReady = true;
     if (run.heardAgent) { clearTimeout(run.watchdog); run.timers.delete(run.watchdog); }
     log("connected, mic on");
-    if (!run.heardAgent) status("Microphone ready. Waiting for Vex…");
+    if (!run.heardAgent) status("Microphone ready. Waiting for Vex...");
   } catch (err) {
     if (current !== run || run.closing) return;
     log("start failed", err.name || "Error");
@@ -139,26 +161,20 @@ function agentArrived(run) {
   if (run.micReady) { clearTimeout(run.watchdog); run.timers.delete(run.watchdog); }
   if (crisis || spread) return;
   phase("conversation");
-  $("chapter").textContent = "The introduction";
-  $("headline").textContent = "Tell me everything.";
-  $("intro").textContent = "Speak naturally. You can interrupt her. She’ll cope.";
   status("Vex is here. Say hello.");
 }
 function wire(run) {
   const room = run.room;
   const active = () => current === run && !run.closing;
   room.on(RoomEvent.TrackSubscribed, (track) => {
-    if (!active()) return;
-    if (track.kind === Track.Kind.Video) { track.attach(face); portal.classList.add("has-video"); }
-    if (track.kind === Track.Kind.Audio) {
-      const el = track.attach(); el.dataset.vex = ""; document.body.appendChild(el); run.audio.add(el);
-      animateMirror(run, track.mediaStreamTrack);
-    }
+    if (!active() || track.kind !== Track.Kind.Audio) return;
+    // Vex is drawn, so any avatar video track is ignored; only her voice is played.
+    const el = track.attach(); el.dataset.vex = ""; document.body.appendChild(el); run.audio.add(el);
+    animateMouth(run, track.mediaStreamTrack);
   });
   room.on(RoomEvent.TrackUnsubscribed, (track) => {
     if (!active()) return;
-    track.detach().forEach((el) => { if (el !== face) { el.remove(); run.audio.delete(el); } });
-    if (track.kind === Track.Kind.Video) portal.classList.remove("has-video");
+    track.detach().forEach((el) => { el.remove(); run.audio.delete(el); });
   });
   room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
     if (!active() || topic !== "vex" || participant?.identity === room.localParticipant.identity) return;
@@ -174,6 +190,7 @@ function wire(run) {
         agentArrived(run);
         subs.textContent = tail(text);
         if (crisis) continue;
+        scene.say(text);
         if (!spread && ready) {
           const announced = readingStart(text);
           if (announced) deal(run, announced);
@@ -184,7 +201,7 @@ function wire(run) {
       }
     } catch { if (active()) log("caption stream interrupted"); }
   });
-  room.on(RoomEvent.Reconnecting, () => { if (active()) { status("Connection lost. Reconnecting…"); clearTimeout(run.reconnectTimer); run.timers.delete(run.reconnectTimer); run.reconnectTimer = schedule(run, () => fail(run, "The connection could not be restored. Please try again."), CONNECT_TIMEOUT_MS); } });
+  room.on(RoomEvent.Reconnecting, () => { if (active()) { status("Connection lost. Reconnecting..."); clearTimeout(run.reconnectTimer); run.timers.delete(run.reconnectTimer); run.reconnectTimer = schedule(run, () => fail(run, "The connection could not be restored. Please try again."), CONNECT_TIMEOUT_MS); } });
   room.on(RoomEvent.Reconnected, () => { if (active()) { clearTimeout(run.reconnectTimer); run.timers.delete(run.reconnectTimer); status("Connected again. Carry on."); } });
   room.on(RoomEvent.Disconnected, () => {
     if (!active()) return;
@@ -195,8 +212,9 @@ function wire(run) {
 function onEvent(run, msg) {
   if (msg.type === "state") {
     if (["listening", "thinking", "speaking"].includes(msg.state)) agentArrived(run);
+    if (msg.state === "thinking" && stage.dataset.agent !== "thinking" && Math.random() < 0.3) scene.react("eye_roll");
     stage.dataset.agent = msg.state;
-    if (!crisis) status(({ listening: "Vex is listening. Your turn.", thinking: "Vex is considering her response…", speaking: "Vex is speaking. You can interrupt." })[msg.state] || "Connecting to Vex…");
+    if (!crisis) status(({ listening: "Your turn. Speak normally.", thinking: "Vex is considering you...", speaking: "Vex is speaking. You can interrupt." })[msg.state] || "Connecting...");
   }
   if (msg.type === "cards") { deck = msg; if (run.pendingDeal) { deal(run, run.pendingDeal.spread, run.pendingDeal.question); run.pendingDeal = null; } }
   if (msg.type === "reading-ready") ready = true;
@@ -207,12 +225,13 @@ function onEvent(run, msg) {
     crisis = true; verdict = ""; spread = null;
     table.replaceChildren();
     $("reading-focus").hidden = $("afterword").hidden = true;
-    $("invitation").hidden = false;
-    prompt.hidden = true;
+    scene.clearCards(); scene.label(""); scene.say(""); scene.dim(true);
     phase("crisis");
     $("chapter").textContent = "The reading is paused";
     $("headline").textContent = "Let’s stop the cards here.";
     $("intro").textContent = msg.text || "Please find your host or someone you trust to talk to.";
+    notice.hidden = false;
+    controls({ leave: "Leave" });
     status("Take your time. Your host can help.");
   }
 }
@@ -221,20 +240,17 @@ function finish(run, reason) {
   if (reason === "error") { fail(run, "Vex lost her connection. Please try again."); return; }
   release(run);
   subs.textContent = "";
-  $("end").hidden = true;
-  $("again").hidden = false;
   delete stage.dataset.agent;
-  if (crisis || reason === "crisis") { phase("crisis"); status("Take your time. Choose Next guest when you’re ready."); return; }
+  if (crisis || reason === "crisis") { phase("crisis"); controls({ leave: "Next guest" }); status("Choose Next guest when you're ready."); return; }
   phase("verdict");
   $("reading-focus").hidden = true;
-  $("invitation").hidden = false;
-  $("chapter").textContent = "The audience is over";
-  $("headline").textContent = reason === "complete" ? "The cards have spoken." : "We’ll leave it there.";
-  $("intro").textContent = reason === "timeout" ? "Our time is up. Take a breath before your next reading." : reason === "away" ? "Gone, then. The cards will remember." : reason === "cancelled" ? "Your reading has ended." : "Your future is now your problem.";
+  const closing = reason === "timeout" ? "Our time is up." : reason === "away" ? "Gone, then. The cards will remember." : reason === "cancelled" ? "We'll leave it there." : "The cards have spoken.";
   $("verdict").textContent = verdict;
   $("afterword").hidden = !verdict;
-  prompt.hidden = true;
-  status(spread ? "Your cards will stay for 30 seconds. Take a photograph." : "Ready for the next guest.");
+  scene.say(verdict || closing, { persistent: true });
+  scene.react("smirk");
+  controls({ talk: "Talk to Vex", inspect: !!spread, leave: "Next guest" });
+  status(spread ? "Your cards stay for 30 seconds. Take a photo." : "Ready for the next guest.");
   schedule(run, reset, RESET_AFTER_MS);
 }
 function deal(run, name, q) {
@@ -242,9 +258,7 @@ function deal(run, name, q) {
   positions = deck.spreads[name] || deck.spreads.short;
   spread = deck.cards.slice(0, positions.length);
   phase("reading");
-  $("invitation").hidden = true;
   $("reading-focus").hidden = false;
-  $("hero-image").hidden = true;
   $("hero-name").textContent = "Let’s see what follows you.";
   $("hero-position").textContent = "The cards are on the table";
   $("hero-orientation").textContent = "";
@@ -253,33 +267,33 @@ function deal(run, name, q) {
   table.replaceChildren();
   positions.forEach((pos, i) => {
     const slot = document.createElement("div"); slot.className = "slot";
-    slot.innerHTML = '<div class="card"><div class="inner"><div class="back"></div><div class="front"><img alt=""></div></div></div><div class="name"></div>';
+    slot.innerHTML = '<div class="card"></div><div class="name"></div>';
     slot.querySelector(".name").textContent = `${i + 1}. ${pos}`;
     slot.setAttribute("aria-label", `Card ${i + 1}: ${pos}, face down`);
     table.append(slot);
-    schedule(run, () => slot.querySelector(".card").classList.add("dealt"), i * 100);
   });
+  scene.deal(positions);
+  scene.label(q ? `"${q}"` : "The cards are on the table.");
+  controls({ talk: "Talk to Vex", talkOn: false, inspect: true, leave: "Leave" });
   log("deal", name);
 }
 function turn(i, card) {
-  const slots = table.querySelectorAll(".slot"), slot = slots[i];
+  const slot = table.querySelectorAll(".slot")[i];
   if (!slot) return;
-  slots.forEach((s) => s.querySelector(".card").classList.remove("lit"));
-  const front = slot.querySelector(".front");
-  front.classList.toggle("reversed", card.reversed);
-  const img = front.querySelector("img"); img.src = `/cards/${card.img}`; img.alt = card.name;
+  const orientation = card.reversed ? "reversed" : "upright";
   slot.querySelector(".name").textContent = card.name;
-  slot.setAttribute("aria-label", `${positions[i]}: ${card.name}, ${card.reversed ? "reversed" : "upright"}`);
-  slot.querySelector(".card").classList.add("dealt", "flipped", "lit");
-  const hero = $("hero-image"); hero.src = img.src; hero.alt = `${card.name}, ${card.reversed ? "reversed" : "upright"}`; hero.hidden = false;
-  $("hero-card").classList.toggle("reversed", card.reversed);
+  slot.setAttribute("aria-label", `${positions[i]}: ${card.name}, ${orientation}`);
+  slot.querySelector(".card").classList.add("flipped");
   $("hero-position").textContent = `${i + 1} / ${spread.length} · ${positions[i]}`;
   $("hero-name").textContent = card.name;
   $("hero-orientation").textContent = card.reversed ? "Reversed" : "Upright";
+  scene.turn(i, card);
+  scene.label(`${i + 1}/${spread.length} ${positions[i]}: ${card.name}${card.reversed ? ", reversed" : ""}`);
   log("flip", i, card.name);
 }
 function tail(text) { return (text.match(/[^.!?]+[.!?]*\s*/g) || [text]).slice(-2).join("").trim(); }
-function animateMirror(run, mediaTrack) {
+// Vex's mouth follows the volume of her own voice track, never the guest's microphone.
+function animateMouth(run, mediaTrack) {
   run.mouthStop?.();
   try {
     const ctx = new AudioContext();
@@ -288,11 +302,13 @@ function animateMirror(run, mediaTrack) {
     const samples = new Uint8Array(analyser.fftSize); let raf;
     const tick = () => {
       analyser.getByteTimeDomainData(samples);
-      const level = Math.min(1, Math.sqrt(samples.reduce((sum, value) => sum + (value - 128) ** 2, 0) / samples.length) / 28);
-      portal.style.setProperty("--voice", level.toFixed(2));
+      scene.voice(Math.min(1, Math.sqrt(samples.reduce((sum, value) => sum + (value - 128) ** 2, 0) / samples.length) / 28));
       raf = requestAnimationFrame(tick);
     };
     tick();
-    run.mouthStop = () => { cancelAnimationFrame(raf); source.disconnect(); ctx.close().catch(() => {}); };
-  } catch { log("mirror audio animation unavailable"); }
+    run.mouthStop = () => { cancelAnimationFrame(raf); source.disconnect(); ctx.close().catch(() => {}); scene.silence(); };
+  } catch { log("mouth animation unavailable"); }
 }
+
+reset();
+if (params.has("demo")) import("./retro-demo.js").then((m) => m.demo(scene, { controls, status }));
