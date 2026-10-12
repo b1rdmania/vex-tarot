@@ -1,0 +1,54 @@
+{
+  "status": "PASS",
+  "paletteColors": 32,
+  "rooms": 3,
+  "idleLines": 6,
+  "checks": [
+    "native dimensions",
+    "palette membership",
+    "rectangle bounds/non-overlap",
+    "64x76 clear face apertures",
+    "single-line dialogue fit",
+    "×4 integer scaling",
+    "letterbox margins",
+    "mockup overlay isolation"
+  ],
+  "images": [
+    {
+      "file": "rooms/01-velvet-alcove.png",
+      "width": 320,
+      "height": 200,
+      "colorsUsed": 29
+    },
+    {
+      "file": "rooms/01-velvet-alcove.laptop.png",
+      "width": 1440,
+      "height": 900,
+      "colorsUsed": 29
+    },
+    {
+      "file": "rooms/02-corner-booth.png",
+      "width": 320,
+      "height": 200,
+      "colorsUsed": 26
+    },
+    {
+      "file": "rooms/02-corner-booth.laptop.png",
+      "width": 1440,
+      "height": 900,
+      "colorsUsed": 26
+    },
+    {
+      "file": "rooms/03-attic-window.png",
+      "width": 320,
+      "height": 200,
+      "colorsUsed": 31
+    },
+    {
+      "file": "rooms/03-attic-window.laptop.png",
+      "width": 1440,
+      "height": 900,
+      "colorsUsed": 31
+    }
+  ]
+}

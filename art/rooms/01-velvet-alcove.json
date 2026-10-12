@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "id": "01-velvet-alcove",
+  "title": "Velvet Alcove",
+  "description": "Frontal velvet nook. The mirror is central, with the dead bouquet and overdue invoice on the left. Warm candlelight is balanced on both sides.",
+  "canvas": {
+    "width": 320,
+    "height": 200,
+    "pixelAspectRatio": 1
+  },
+  "background": "01-velvet-alcove.png",
+  "palette": "../palette.json",
+  "rects": {
+    "face": {
+      "x": 128,
+      "y": 41,
+      "width": 64,
+      "height": 76
+    },
+    "table": {
+      "x": 28,
+      "y": 129,
+      "width": 266,
+      "height": 46
+    },
+    "speech": {
+      "x": 64,
+      "y": 5,
+      "width": 192,
+      "height": 20
+    },
+    "controls": {
+      "x": 0,
+      "y": 184,
+      "width": 320,
+      "height": 16
+    }
+  },
+  "safeAreas": {
+    "cards": {
+      "x": 65,
+      "y": 136,
+      "width": 190,
+      "height": 30
+    }
+  },
+  "face": {
+    "fit": "cover",
+    "backgroundColorIndex": 0,
+    "frameIsBakedIntoBackground": true,
+    "notes": "64x76 inner opening. Crop and colour-match the live head and shoulders into this rectangle; no generated face is baked in."
+  },
+  "speech": {
+    "fontHeight": 7,
+    "glyphAdvance": 6,
+    "padding": 3,
+    "colorIndex": 7,
+    "shadowIndex": 0,
+    "align": "center",
+    "maxLines": 1
+  },
+  "controlItems": [
+    {
+      "id": "talk",
+      "label": "Talk to Vex",
+      "rect": {
+        "x": 8,
+        "y": 185,
+        "width": 82,
+        "height": 14
+      }
+    },
+    {
+      "id": "inspect",
+      "label": "Inspect your cards",
+      "rect": {
+        "x": 98,
+        "y": 185,
+        "width": 132,
+        "height": 14
+      }
+    },
+    {
+      "id": "leave",
+      "label": "Leave",
+      "rect": {
+        "x": 242,
+        "y": 185,
+        "width": 70,
+        "height": 14
+      }
+    }
+  ],
+  "mockup": {
+    "file": "01-velvet-alcove.laptop.png",
+    "width": 1440,
+    "height": 900,
+    "scale": 4,
+    "scene": {
+      "x": 80,
+      "y": 50,
+      "width": 1280,
+      "height": 800
+    },
+    "letterboxColorIndex": 0
+  },
+  "coordinates": "Top-left origin; width/height counts pixels; right and bottom edges are exclusive. All rects use native 320x200 coordinates.",
+  "layerOrder": [
+    "background",
+    "face-video-clipped-to-face",
+    "cards-within-safeAreas.cards",
+    "speech",
+    "controls"
+  ],
+  "notes": [
+    "Background PNG contains no dialogue or control labels.",
+    "Laptop mockup bakes in sample text for composition review only; controls there are not interactive.",
+    "Same face size in all three options for a fair moving-face comparison."
+  ]
+}

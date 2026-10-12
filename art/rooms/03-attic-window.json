@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "id": "03-attic-window",
+  "title": "Attic Window",
+  "description": "Mirror on the right, moonlit window and wilted bouquet on the left. Cool window light meets warm candles; the invoice is pinned to the bookcase.",
+  "canvas": {
+    "width": 320,
+    "height": 200,
+    "pixelAspectRatio": 1
+  },
+  "background": "03-attic-window.png",
+  "palette": "../palette.json",
+  "rects": {
+    "face": {
+      "x": 224,
+      "y": 39,
+      "width": 64,
+      "height": 76
+    },
+    "table": {
+      "x": 56,
+      "y": 134,
+      "width": 238,
+      "height": 43
+    },
+    "speech": {
+      "x": 120,
+      "y": 3,
+      "width": 192,
+      "height": 15
+    },
+    "controls": {
+      "x": 0,
+      "y": 184,
+      "width": 320,
+      "height": 16
+    }
+  },
+  "safeAreas": {
+    "cards": {
+      "x": 82,
+      "y": 140,
+      "width": 174,
+      "height": 29
+    }
+  },
+  "face": {
+    "fit": "cover",
+    "backgroundColorIndex": 0,
+    "frameIsBakedIntoBackground": true,
+    "notes": "64x76 inner opening. Crop and colour-match the live head and shoulders into this rectangle; no generated face is baked in."
+  },
+  "speech": {
+    "fontHeight": 7,
+    "glyphAdvance": 6,
+    "padding": 3,
+    "colorIndex": 7,
+    "shadowIndex": 0,
+    "align": "center",
+    "maxLines": 1
+  },
+  "controlItems": [
+    {
+      "id": "talk",
+      "label": "Talk to Vex",
+      "rect": {
+        "x": 8,
+        "y": 185,
+        "width": 82,
+        "height": 14
+      }
+    },
+    {
+      "id": "inspect",
+      "label": "Inspect your cards",
+      "rect": {
+        "x": 98,
+        "y": 185,
+        "width": 132,
+        "height": 14
+      }
+    },
+    {
+      "id": "leave",
+      "label": "Leave",
+      "rect": {
+        "x": 242,
+        "y": 185,
+        "width": 70,
+        "height": 14
+      }
+    }
+  ],
+  "mockup": {
+    "file": "03-attic-window.laptop.png",
+    "width": 1440,
+    "height": 900,
+    "scale": 4,
+    "scene": {
+      "x": 80,
+      "y": 50,
+      "width": 1280,
+      "height": 800
+    },
+    "letterboxColorIndex": 0
+  },
+  "coordinates": "Top-left origin; width/height counts pixels; right and bottom edges are exclusive. All rects use native 320x200 coordinates.",
+  "layerOrder": [
+    "background",
+    "face-video-clipped-to-face",
+    "cards-within-safeAreas.cards",
+    "speech",
+    "controls"
+  ],
+  "notes": [
+    "Background PNG contains no dialogue or control labels.",
+    "Laptop mockup bakes in sample text for composition review only; controls there are not interactive.",
+    "Same face size in all three options for a fair moving-face comparison."
+  ]
+}
