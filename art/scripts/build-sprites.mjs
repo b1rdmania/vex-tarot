@@ -21,25 +21,27 @@ const mouthBlank=Buffer.from(base);
 function eyes(b,expression){
   // Keep the source's sculpted eyebrows and heavy lids for her resting look.
   if(expression==='idle'||expression==='breathe_in')return;
+  // Replace the entire eye aperture, including the old lash and iris pixels.
+  // Curved lids use the portrait's plum shadows and bone highlights; the
+  // outer corner stays tapered rather than enclosing a rectangular white eye.
+  const eyePaint = {
+    blink_half: ['6555544677','5444444567','4111111457','1430311457','7544445677','7766677bb7','77777bbbb7'],
+    blink:      ['6555544677','5566655567','4567766547','5414444157','7541114577','7766677bb7','77777bbbb7'],
+    eye_roll:   ['6555544677','5444444567','4111111457','1430130457','754aaa4577','7766677bb7','77777bbbb7'],
+    dramatic:   ['6555544677','5441114567','4113031457','1431013457','7543034577','7764447bb7','77777bbbb7'],
+  };
+  if (eyePaint[expression]) {
+    const tones = {0:0,1:1,3:30,4:4,5:5,6:6,7:7,a:30,b:31};
+    for (const [y,row] of eyePaint[expression].entries()) {
+      for (const [x,tone] of [...row].entries()) {
+        pixel(b,21+x,26+y,tones[tone]);
+        pixel(b,42-x,26+y,tones[tone]);
+      }
+    }
+    return;
+  }
   for(const [x,right]of [[22,false],[35,true]]){
-    if(expression==='blink'||expression==='blink_half'){
-      box(b,x,27,8,4,7);
-      box(b,x+1,30,6,1,31);
-      line(b,x,29,x+6,29,0);
-      pixel(b,x+(right?7:-1),28,0);
-      if(expression==='blink_half'){box(b,x+2,29,3,1,31);pixel(b,x+3,29,0);}
-    } else if(expression==='eye_roll'){
-      box(b,x+1,28,6,2,31);
-      box(b,x+3,27,2,1,0);
-      line(b,x,27,x+6,27,0);
-      pixel(b,x+3,28,0);
-    } else if(expression==='dramatic'){
-      box(b,x,27,8,4,7);
-      box(b,x+1,27,6,3,31);
-      box(b,x+3,28,2,2,0);
-      line(b,x+1,26,x+6,26,0);
-      line(b,x+2,30,x+5,30,7);
-    } else if(expression==='unimpressed'){
+    if(expression==='unimpressed'){
       box(b,x,27,8,2,5);
       line(b,x,29,x+6,29,0);
       pixel(b,x+3,30,0);
