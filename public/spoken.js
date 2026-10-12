@@ -8,6 +8,15 @@ export function readingStart(text) {
   return null;
 }
 
+// Which spread to lay, if this text starts a reading. After the opening gate the
+// announcement is enough. Before it, Vex must also name the first drawn card: she
+// has gone ahead with the reading, so the table follows her rather than staying empty.
+export function readingUnderway(text, cards, spreads, ready) {
+  const announced = readingStart(text);
+  if (!announced || ready) return announced;
+  return advance(text, cards.slice(0, spreads[announced].length), 0) > 0 ? announced : null;
+}
+
 export function advance(text, cards, next) {
   let at = 0;
   while (next < cards.length) {

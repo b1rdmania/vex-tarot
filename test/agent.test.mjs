@@ -118,3 +118,14 @@ test("typed messages reach Vex, get the crisis screen, and keep a typing guest p
   assert.equal(s.session.replies.length, replies, "nothing more is sent to the model after a crisis");
   assert.ok(!JSON.stringify(s.logs).includes("flat"));
 });
+test("the agent follows a reading Vex starts before the gate, but not a bare announcement", async () => {
+  const s = await setup();
+  s.say("user", "Andy");
+  s.say("assistant", "The cards are on the table.");
+  assert.equal(s.session.agent.state.phase, "opening");
+  const [first] = s.session.agent.state.cards;
+  s.say("assistant", `Right. The cards are on the table. ${first.name}, ${first.reversed ? "reversed" : "upright"}. Classic.`);
+  assert.equal(s.session.agent.state.phase, "reading");
+  assert.equal(s.sent.find(x => x.type === "deal").spread, "short");
+  assert.equal(s.session.agent.state.spoken, 1);
+});

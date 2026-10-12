@@ -1,5 +1,5 @@
 import { Room, RoomEvent, Track } from "./vendor/livekit-client.esm.mjs";
-import { advance, readingStart } from "./spoken.js";
+import { advance, readingUnderway } from "./spoken.js";
 import { createScene } from "./retro.js";
 
 const $ = (id) => document.getElementById(id);
@@ -229,8 +229,8 @@ function wire(run) {
         if (crisis) continue;
         // A line she was cut off in must not cover what the guest just typed.
         if (!(run.typedAt > opened)) scene.say(text);
-        if (!spread && ready) {
-          const announced = readingStart(text);
+        if (!spread && deck) {
+          const announced = readingUnderway(text, deck.cards, deck.spreads, ready);
           if (announced) deal(run, announced);
         }
         if (!spread) continue;
