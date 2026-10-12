@@ -1,0 +1,134 @@
+{
+  "version": 2,
+  "id": "01-velvet-alcove",
+  "title": "Velvet Alcove",
+  "description": "Frontal velvet nook. The mirror is central, with the dead bouquet and overdue invoice on the left. Warm candlelight is balanced on both sides.",
+  "canvas": {
+    "width": 320,
+    "height": 200,
+    "pixelAspectRatio": 1
+  },
+  "background": "01-velvet-alcove.background.png",
+  "still": "01-velvet-alcove.png",
+  "palette": "../palette.json",
+  "rects": {
+    "sprite": {
+      "x": 128,
+      "y": 41,
+      "width": 64,
+      "height": 76
+    },
+    "table": {
+      "x": 28,
+      "y": 129,
+      "width": 266,
+      "height": 46
+    },
+    "speech": {
+      "x": 64,
+      "y": 5,
+      "width": 192,
+      "height": 20
+    },
+    "controls": {
+      "x": 0,
+      "y": 184,
+      "width": 320,
+      "height": 16
+    }
+  },
+  "safeAreas": {
+    "cards": {
+      "x": 65,
+      "y": 136,
+      "width": 190,
+      "height": 30
+    }
+  },
+  "sprite": {
+    "atlas": "../sprites/vex-sheet.json",
+    "defaultBody": "body/idle",
+    "defaultMouth": "mouth/closed",
+    "drawOffset": {
+      "x": 0,
+      "y": 0
+    },
+    "backgroundColorIndex": 0,
+    "frameIsBakedIntoBackground": true,
+    "handOrigin": {
+      "x": 131,
+      "y": 97
+    },
+    "notes": "Draw body and mouth cells at rects.sprite origin. Use the clean background plate when redrawing to erase the previous mouth/body/hand. The still PNG already contains idle Vex; it is for static fallback or preview."
+  },
+  "speech": {
+    "fontHeight": 7,
+    "glyphAdvance": 6,
+    "padding": 3,
+    "colorIndex": 7,
+    "shadowIndex": 0,
+    "align": "center",
+    "maxLines": 1
+  },
+  "controlItems": [
+    {
+      "id": "talk",
+      "label": "Talk to Vex",
+      "rect": {
+        "x": 8,
+        "y": 185,
+        "width": 82,
+        "height": 14
+      }
+    },
+    {
+      "id": "inspect",
+      "label": "Inspect your cards",
+      "rect": {
+        "x": 98,
+        "y": 185,
+        "width": 132,
+        "height": 14
+      }
+    },
+    {
+      "id": "leave",
+      "label": "Leave",
+      "rect": {
+        "x": 242,
+        "y": 185,
+        "width": 70,
+        "height": 14
+      }
+    }
+  ],
+  "mockup": {
+    "file": "01-velvet-alcove.laptop.png",
+    "width": 1440,
+    "height": 900,
+    "scale": 4,
+    "scene": {
+      "x": 80,
+      "y": 50,
+      "width": 1280,
+      "height": 800
+    },
+    "letterboxColorIndex": 0
+  },
+  "coordinates": "Top-left origin; width/height counts pixels; right and bottom edges are exclusive. All rects use native 320x200 coordinates.",
+  "layerOrder": [
+    "background",
+    "sprite-body",
+    "sprite-mouth",
+    "cards-within-safeAreas.cards",
+    "sprite-hand-optional",
+    "speech",
+    "controls"
+  ],
+  "notes": [
+    "The clean background plate contains no character, dialogue or control labels.",
+    "The native still and laptop mockup contain the drawn idle character.",
+    "Laptop mockup bakes in sample text for composition review only; controls there are not interactive.",
+    "The same registered 64x76 sprite is used in all three rooms. The agent supplies voice only."
+  ]
+}

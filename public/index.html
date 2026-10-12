@@ -3,44 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#140d10">
+<meta name="theme-color" content="#100e18">
 <title>Hot Goth Tarot · Vex</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=IBM+Plex+Mono:wght@400&display=swap">
-<link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="live.css">
+<link rel="stylesheet" href="retro.css">
 </head>
 <body>
-<main id="stage" class="live" data-state="idle" data-phase="idle">
-  <header class="masthead"><a class="brand" href="/">Hot Goth Tarot<span>Private readings with Vex</span></a><span class="edition">One guest. One questionable future.</span></header>
-  <section class="performance" aria-label="Your reading">
-    <div class="presence">
-      <div class="portal" id="portal">
-        <video id="face" autoplay playsinline muted></video>
-        <div class="stand-in" aria-hidden="true"><div class="mirror-mark">V</div><span>The other side is listening</span></div>
-      </div>
-      <p class="nameplate">Vex <span>Present, unfortunately.</span></p>
-    </div>
-    <div class="invitation" id="invitation">
+<main id="stage" data-state="idle" data-phase="idle">
+  <div class="frame" id="frame">
+    <canvas id="scene" width="320" height="212" aria-hidden="true"></canvas>
+    <nav class="controls" aria-label="Reading controls">
+      <button id="talk" type="button" data-control="talk">Talk to Vex</button>
+      <input id="type" type="text" maxlength="500" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Type to Vex" disabled>
+      <button id="leave" type="button" data-control="leave" hidden>Leave</button>
+    </nav>
+    <section class="notice" id="notice" hidden>
       <p class="eyebrow" id="chapter">A private audience</p>
-      <h1 id="headline">Your future.<br>My condolences.</h1>
-      <p class="intro" id="intro">Sit close. Tell me what’s on your mind.<br>I’ll consult the cards. And judge you a little.</p>
-      <button class="prompt" id="prompt" type="button">Take a seat <span aria-hidden="true">↗</span></button>
-      <p class="keyboard-hint" id="hint">or press space · about three minutes</p>
-    </div>
-    <div class="reading-focus" id="reading-focus" hidden>
-      <div class="hero-card" id="hero-card"><img id="hero-image" alt=""></div>
-      <div class="card-caption"><p class="eyebrow" id="hero-position"></p><h1 id="hero-name"></h1><p id="hero-orientation"></p><p class="question" id="question"></p></div>
-    </div>
-  </section>
-  <section class="afterword" id="afterword" hidden><p class="eyebrow">The verdict</p><p id="verdict"></p><p class="keepsake">Photograph your cards. Take the hint with you.</p></section>
-  <div class="table" id="table" aria-label="Your cards"></div>
-  <p class="subs" id="subs" aria-live="off" hidden></p>
-  <footer class="session-bar">
-    <p class="status" id="status" role="status"><span class="status-dot" aria-hidden="true"></span><span id="status-text">Ready when you are.</span></p>
-    <div class="controls"><button id="captions" type="button" aria-pressed="false">Captions off</button><button id="end" type="button" hidden>End reading</button><button id="again" type="button" hidden>Next guest</button></div>
-  </footer>
-  <p class="footnote">An AI in a mirror. For entertainment. <span>Quiet corner recommended.</span></p>
+      <h1 id="headline">Your future. My condolences.</h1>
+      <p id="intro">Sit close. Tell me what’s on your mind. I’ll consult the cards. And judge you a little.</p>
+    </section>
+  </div>
+  <!-- Screen-reader copy of what the canvas shows. -->
+  <div class="sr-only">
+    <p id="status" role="status"><span id="status-text">Ready when you are.</span></p>
+    <p id="subs" aria-live="off"></p>
+    <div id="reading-focus" hidden><p id="hero-position"></p><p id="hero-name"></p><p id="hero-orientation"></p><p id="question"></p></div>
+    <div class="table" id="table" aria-label="Your cards"></div>
+    <section id="afterword" hidden><p>The verdict</p><p id="verdict"></p></section>
+  </div>
   <pre class="debug" id="debug" hidden></pre>
 </main>
 <script type="module" src="live.js"></script>

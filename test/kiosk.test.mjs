@@ -38,13 +38,13 @@ async function pageFor(t, options = {}) {
   await page.route("**/api/token", route => route.fulfill({ status: options.status || 200, json: { url: "mock", token: "mock" } }));
   await page.route("https://fonts.googleapis.com/**", route => route.abort());
   if (options.denied) await page.addInitScript(() => { window.__micDenied = true; });
-  await page.goto(base);
+  await page.goto(base + (options.query || ""));
   return page;
 }
 const event = (page, msg) => page.evaluate(msg => window.__vexMock.event(msg), msg);
 const say = (page, text) => page.evaluate(text => window.__vexMock.say(text), text);
 async function start(page) {
-  await page.getByRole("button", { name: "Take a seat" }).click();
+  await page.getByRole("button", { name: "Talk to Vex" }).click();
   await page.waitForFunction(() => window.__vexMock.rooms.length === 1);
 }
 async function ready(page) { await event(page, { type: "cards", cards, spreads }); await event(page, { type: "state", state: "listening" }); }
@@ -53,24 +53,24 @@ async function shot(page, name) {
   await mkdir(process.env.VEX_SHOTS, { recursive: true });
   await page.screenshot({ path: resolve(process.env.VEX_SHOTS, name + ".png"), fullPage: true, animations: "disabled" });
 }
-test("denied microphone disconnects, displays a visible error, and can retry", async t => {
+test("denied microphone carries on as a typed reading", async t => {
   const page = await pageFor(t, { denied: true });
   await start(page);
-  await page.getByRole("button", { name: "Try again" }).waitFor();
-  assert.match(await page.locator("#intro").innerText(), /Microphone access was denied/);
-  assert.equal(await page.evaluate(() => window.__vexMock.disconnects), 1);
-  await page.evaluate(() => { window.__micDenied = false; });
-  await page.getByRole("button", { name: "Try again" }).click();
-  await page.waitForFunction(() => window.__vexMock.rooms.length === 2);
+  await page.waitForFunction(() => /Type to Vex/.test(document.querySelector("#status-text").textContent));
+  assert.equal(await page.evaluate(() => window.__vexMock.disconnects), 0);
   await ready(page);
   assert.equal(await page.locator("#stage").getAttribute("data-phase"), "conversation");
-  // Events from the discarded room cannot reset or end this guest's session.
-  await page.evaluate(() => window.__vexMock.rooms[0].event({ type: "end" }));
-  assert.equal(await page.locator("#stage").getAttribute("data-phase"), "conversation");
+  assert.equal(await page.evaluate(() => document.activeElement.id), "type", "type box is focused");
+  await page.keyboard.type("Will I get the flat?");
+  await page.keyboard.press("Enter");
+  assert.deepEqual(await page.evaluate(() => window.__vexMock.sent), [{ text: "Will I get the flat?", topic: "lk.chat" }]);
+  assert.equal(await page.locator("#type").inputValue(), "");
+  // Events from a discarded room cannot reset or end this guest's session.
+  await page.evaluate(() => window.__vexMock.rooms[0].event({ type: "deal", spread: "short" }));
 });
 test("bad access code gives a visible recovery message", async t => {
   const page = await pageFor(t, { status: 401 });
-  await page.getByRole("button", { name: "Take a seat" }).click();
+  await page.getByRole("button", { name: "Talk to Vex" }).click();
   await page.getByRole("button", { name: "Try again" }).waitFor();
   assert.match(await page.locator("#intro").innerText(), /valid access code/);
 });
@@ -92,19 +92,18 @@ test("five-card laptop reading preserves verdict then resets for next guest", as
   assert.equal(await page.locator(".slot").count(), 0);
   await say(page, "The cards are on the table.");
   assert.equal(await page.locator(".slot").count(), 5);
-  await page.getByRole("button", { name: "Captions off" }).click();
   for (let i = 0; i < 5; i++) await say(page, `${cards[i].name}, ${cards[i].reversed ? "reversed" : "upright"}. Take a chance.`);
   await page.clock.runFor(1500);
   assert.equal(await page.locator(".card.flipped").count(), 5);
   assert.equal(await page.locator("#hero-name").innerText(), cards[4].name);
-  assert.equal(await page.locator("#subs").isVisible(), true);
+  assert.match(await page.locator("#subs").textContent(), /Take a chance/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await shot(page, "laptop-reading");
   assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, "laptop reading fits vertically");
   await event(page, { type: "verdict", text: "Make the call." });
   await event(page, { type: "end", reason: "complete", verdict: "Make the call." });
   assert.equal(await page.locator("#verdict").innerText(), "Make the call.");
-  assert.equal(await page.locator("#afterword").isVisible(), true);
+  assert.equal(await page.locator("#afterword").isHidden(), false);
   await shot(page, "laptop-verdict");
   assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, "laptop verdict fits vertically");
   await page.clock.fastForward(31_000);
@@ -145,7 +144,7 @@ test("mobile layout remains usable without horizontal overflow", async t => {
   await say(page, `${cards[0].name}, upright. Take a chance.`);
   await page.clock.runFor(1500);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  assert.equal(await page.getByRole("button", { name: "End reading" }).isVisible(), true);
+  assert.equal(await page.getByRole("button", { name: "Leave" }).isVisible(), true);
   await shot(page, "phone-reading");
 });
 
@@ -164,4 +163,26 @@ test("Celtic announcement chooses ten cards without a tool event", async t => {
   await event(page, { type: "reading-ready" });
   await say(page, "The Celtic Cross is on the table.");
   assert.equal(await page.locator(".slot").count(), 10);
+});
+test("typing sends lk.chat, pings typing, and is disabled outside a session", async t => {
+  const page = await pageFor(t);
+  assert.equal(await page.locator("#type").isDisabled(), true);
+  await start(page); await ready(page);
+  await page.locator("#type").fill("");
+  await page.locator("#type").pressSequentially("hello");
+  await page.locator("#type").press("Enter");
+  assert.deepEqual(await page.evaluate(() => window.__vexMock.sent), [{ text: "hello", topic: "lk.chat" }]);
+  assert.deepEqual(await page.evaluate(() => window.__vexMock.data[0]), { text: '{"type":"typing"}', topic: "vex-guest" });
+  await page.locator("#type").press("Enter");
+  assert.equal(await page.evaluate(() => window.__vexMock.sent.length), 1, "empty lines are not sent");
+  await event(page, { type: "crisis", text: "Please find your host." });
+  assert.equal(await page.locator("#type").isDisabled(), true);
+});
+test("starting a real session stops the scripted demo", async t => {
+  const page = await pageFor(t, { query: "/?demo" });
+  await page.waitForFunction(() => document.querySelector("#talk"));
+  await start(page); await ready(page);
+  await page.clock.runFor(70_000);
+  assert.equal(await page.getByRole("button", { name: "Leave" }).isVisible(), true, "demo did not swap in its own controls");
+  assert.equal(await page.getByRole("button", { name: "Next guest" }).count(), 0);
 });

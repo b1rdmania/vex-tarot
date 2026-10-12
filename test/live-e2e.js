@@ -27,7 +27,7 @@ try {
     navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Test denial", "NotAllowedError"); };
   });
   await page.goto(process.env.SITE || "http://localhost:8787/");
-  await page.getByRole("button", { name: "Take a seat" }).click();
+  await page.getByRole("button", { name: "Talk to Vex" }).click();
   const start = Date.now();
   let turned = 0, completed = false, sawVerdict = false, sawCrisis = false;
   while (Date.now() - start < LIMIT_S * 1000) {

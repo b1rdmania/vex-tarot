@@ -8,7 +8,7 @@ const moduleFrom = (path) => import(`data:text/javascript;base64,${Buffer.from(f
 const spoken = await moduleFrom("../public/spoken.js");
 const persona = await moduleFrom("../agent/persona.js");
 async function setup(extraEnv = {}) {
-  const sent = [], logs = [], timers = new Map(); let nextTimer = 0, session, deleted = 0;
+  const sent = [], logs = [], timers = new Map(), roomHandlers = {}; let nextTimer = 0, session, deleted = 0;
   class Service {}
   class Agent { constructor(options) { Object.assign(this, options); } }
   class Session {
@@ -16,7 +16,7 @@ async function setup(extraEnv = {}) {
     constructor() { session = this; }
     on(name, callback) { this.handlers.set(name, callback); }
     emit(name, event) { this.handlers.get(name)?.(event); }
-    async start(options) { this.agent = options.agent; }
+    async start(options) { this.agent = options.agent; this.inputOptions = options.inputOptions; }
     generateReply(options) { this.replies.push(options); }
     say(text) { this.lines.push(text); }
     interrupt() {}
@@ -37,10 +37,12 @@ async function setup(extraEnv = {}) {
     .replace("export default defineAgent", "globalThis.definition = defineAgent")
     .replace(/^cli.runApp.*$/m, "");
   vm.runInContext(source, ctx);
-  await ctx.definition.entry({ connect: async () => {}, proc: { userData: {} }, room: { localParticipant: { publishData: async data => sent.push(JSON.parse(new TextDecoder().decode(data))) } }, deleteRoom: async () => { deleted++; } });
+  await ctx.definition.entry({ connect: async () => {}, proc: { userData: {} }, room: { on: (name, fn) => { roomHandlers[name] = fn; }, localParticipant: { publishData: async data => sent.push(JSON.parse(new TextDecoder().decode(data))) } }, deleteRoom: async () => { deleted++; } });
   const say = (role, text, interrupted = false) => session.emit("ConversationItemAdded", { item: { type: "message", role, textContent: text, interrupted } });
   const runTimer = ms => { for (const [id, timer] of [...timers]) if (timer.ms === ms) { timers.delete(id); timer.fn(); } };
-  return { sent, logs, timers, session, say, runTimer, deleted: () => deleted };
+  const typed = text => session.inputOptions.textInputCallback(session, { text });
+  const ping = () => roomHandlers.dataReceived(new TextEncoder().encode('{"type":"typing"}'), null, null, "vex-guest");
+  return { sent, logs, timers, session, say, runTimer, typed, ping, deleted: () => deleted };
 }
 test("opening gate blocks early deals and card references; explicit fallback works", async () => {
   const s = await setup();
@@ -101,4 +103,18 @@ test("recoverable errors allow SDK retry; fatal errors close the session", async
   s.session.emit("Error", { error: { recoverable: false } });
   assert.equal(s.session.stopped, true);
   assert.equal(s.sent.at(-1).reason, "error");
+});
+test("typed messages reach Vex, get the crisis screen, and keep a typing guest present", async () => {
+  const s = await setup();
+  s.typed("Will I get the flat?");
+  assert.equal(s.session.replies.at(-1).userInput, "Will I get the flat?");
+  s.ping();
+  s.session.emit("UserStateChanged", { newState: "away" });
+  assert.equal(s.session.agent.state.ending, false, "a typing guest is not away");
+  s.typed("I don't see the point in anything");
+  assert.equal(s.sent.at(-1).type, "crisis");
+  const replies = s.session.replies.length;
+  s.typed("hello?");
+  assert.equal(s.session.replies.length, replies, "nothing more is sent to the model after a crisis");
+  assert.ok(!JSON.stringify(s.logs).includes("flat"));
 });
