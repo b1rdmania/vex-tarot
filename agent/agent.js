@@ -11,7 +11,7 @@ import * as liveavatar from "@livekit/agents-plugin-liveavatar";
 import * as openai from "@livekit/agents-plugin-openai";
 import * as silero from "@livekit/agents-plugin-silero";
 import OpenAI from "openai";
-import { advance } from "../public/spoken.js";
+import { advance, readingStart, lastSentence } from "../public/spoken.js";
 import { CRISIS_LINE, CRISIS_PATTERN, GREETING, INSTRUCTIONS, SPREADS, WRAP_UP } from "./persona.js";
 
 const DECK = JSON.parse(readFileSync(new URL("../src/deck.json", import.meta.url), "utf8"));
@@ -76,7 +76,11 @@ class StoppableAvatar extends liveavatar.AvatarSession {
 function stopForCrisis(session, state, send) {
   if (state.crisis) return;
   state.crisis = state.ending = true;
-  send({ type: "crisis" });
+  state.reason = "crisis";
+  state.verdict = "";
+  clearTimeout(state.finishTimer);
+  state.finishTimer = null;
+  send({ type: "crisis", text: CRISIS_LINE });
   try {
     session.interrupt({ force: true });
   } catch {}
@@ -99,14 +103,16 @@ class Vex extends voice.Agent {
             required: ["spread", "question"],
           },
           execute: async ({ spread, question }) => {
+            if (state.ending || state.closing) return "The session has ended. Say nothing more.";
             if (state.spread) return "The cards are already dealt. Read them.";
             // The opening is the show. Hold the cards until the guest has had a few turns.
             if (state.guestTurns < MIN_GUEST_TURNS && !state.hurry) {
               return "Too soon. The cards stay in the deck. Keep talking with them: roast them, dig into the question, and confirm it before you deal.";
             }
             state.spread = SPREADS[spread] ? spread : "short";
+            state.phase = "reading";
             send({ type: "deal", spread: state.spread, question });
-            return "The cards are on the table. Say one line, then read them in order.";
+            return "Announce that the cards are on the table, then read them in order. Always announce the full card name and upright or reversed.";
           },
         }),
         crisis: llm.tool({
@@ -136,7 +142,7 @@ export default defineAgent({
   entry: async (ctx) => {
     const logger = log();
     await ctx.connect();
-    const state = { cards: draw(SPREADS.celtic.length), spread: null, spoken: 0, guestTurns: 0, hurry: false, ending: false, crisis: false, closing: false };
+    const state = { cards: draw(SPREADS.celtic.length), spread: null, spoken: 0, guestTurns: 0, hurry: false, ending: false, crisis: false, closing: false, phase: "opening", ready: false, reason: "complete", verdict: "" };
     const encoder = new TextEncoder();
     const send = (msg) =>
       ctx.room.localParticipant
@@ -165,7 +171,7 @@ export default defineAgent({
 
     session.on(AgentSessionEventTypes.UserInputTranscribed, (ev) => {
       if (!state.crisis && CRISIS_PATTERN.test(ev.transcript)) {
-        logger.warn({ transcript: ev.transcript }, "crisis screen matched");
+        logger.warn("crisis screen matched");
         stopForCrisis(session, state, send);
       }
     });
@@ -173,29 +179,49 @@ export default defineAgent({
     session.on(AgentSessionEventTypes.UserStateChanged, (ev) => {
       if (ev.newState === "away" && !state.ending) {
         state.ending = true;
+        state.reason = "away";
         session.say("Gone, then. The cards will remember.", { allowInterruptions: false });
       }
     });
     session.on(AgentSessionEventTypes.ConversationItemAdded, (ev) => {
       const item = ev.item;
       if (item?.type !== "message") return;
-      logger.info({ role: item.role, text: item.textContent }, "turn");
+      // Operational metadata only: guest questions and readings stay out of logs.
+      logger.info({ role: item.role, interrupted: Boolean(item.interrupted) }, "turn");
       if (item.role === "user") {
         state.guestTurns++;
         if (/just (read|deal|do) (the|my) cards|hurry|quick(ly)?|no time/i.test(item.textContent || "")) state.hurry = true;
+        if (!state.ready && (state.hurry || state.guestTurns >= MIN_GUEST_TURNS)) {
+          state.ready = true;
+          send({ type: "reading-ready" });
+        }
       }
-      // Her last line has finished playing: close the room. The tool that set
-      // `ending` runs while that line is still being spoken, so wait for the item.
       if (item.role !== "assistant" || state.closing) return;
-      // The reading ends with the line that reaches the last card (the verdict
-      // follows in the same breath). Without a deal, she was reading the short spread.
-      const spread = state.cards.slice(0, SPREADS[state.spread || "short"].length);
-      state.spoken = advance(item.textContent || "", spread, state.spoken);
-      if (!state.ending && state.spoken === spread.length) {
-        state.ending = true;
+      const text = item.textContent || "";
+      // Speech is only a fallback for a failed tool call after the opening gate,
+      // and only an explicit table announcement can enter the reading phase.
+      if (!state.ending && !state.spread && state.ready) {
+        const announced = readingStart(text);
+        if (announced) {
+          state.spread = announced;
+          state.phase = "reading";
+          send({ type: "deal", spread: announced });
+        }
       }
-      const last = !state.crisis || (item.textContent || "").includes("Samaritans");
-      if (state.ending && last) setTimeout(() => state.finish(), 2000);
+      if (!state.ending && state.phase === "reading") {
+        const spread = state.cards.slice(0, SPREADS[state.spread].length);
+        state.spoken = advance(text, spread, state.spoken);
+        // An interrupted last card still needs its interpretation and verdict.
+        if (state.spoken === spread.length && !item.interrupted) {
+          state.ending = true;
+          state.verdict = lastSentence(text);
+          send({ type: "verdict", text: state.verdict });
+        }
+      }
+      const last = !state.crisis || text.includes("Samaritans");
+      if (state.ending && last && !item.interrupted && !state.finishTimer) {
+        state.finishTimer = setTimeout(() => state.finish(), 2000);
+      }
     });
     session.on(AgentSessionEventTypes.FunctionToolsExecuted, (ev) =>
       logger.info({ tools: ev.functionCalls?.map((c) => c.name) }, "tools"));
@@ -204,15 +230,31 @@ export default defineAgent({
     // Deleting the room disconnects the kiosk, which then resets.
     state.finish = () => {
       if (state.closing) return;
-      state.closing = true;
+      state.closing = state.ending = true;
       clearTimeout(state.wrap);
-      send({ type: "end" }); // the kiosk hangs up too, in case deleting the room fails
+      clearTimeout(state.hardStop);
+      clearTimeout(state.finishTimer);
+      send({ type: "end", reason: state.reason, verdict: state.verdict }); // the kiosk hangs up too, in case deleting the room fails
       logger.info("session finished, deleting room");
       ctx.deleteRoom().catch((err) => logger.warn({ err: String(err) }, "deleteRoom failed"));
       session.shutdown({ drain: false });
     };
-    session.on(AgentSessionEventTypes.Close, () => state.finish());
-    session.on(AgentSessionEventTypes.Error, (ev) => logger.error({ err: String(ev.error?.message || ev.error) }, "session error"));
+    session.on(AgentSessionEventTypes.Close, () => {
+      if (!state.ending) state.reason = "error";
+      state.finish();
+    });
+    session.on(AgentSessionEventTypes.Error, (ev) => {
+      if (ev.error?.recoverable) return;
+      logger.error("session error");
+      state.reason = "error";
+      state.finish();
+    });
+    // Enforced independently of model output, including avatar/session startup.
+    state.hardStop = setTimeout(() => {
+      state.ending = true;
+      state.reason = state.crisis ? "crisis" : "timeout";
+      state.finish();
+    }, MAX_SESSION_MS);
 
     const avatarKey = env("LIVEAVATAR_API_KEY");
     if (avatarKey) {
@@ -233,6 +275,7 @@ export default defineAgent({
       }
     }
 
+    if (state.closing) return;
     await session.start({
       agent: new Vex(state, send),
       room: ctx.room,
@@ -240,9 +283,10 @@ export default defineAgent({
       record: false,
     });
 
+    if (state.closing) return;
     state.wrap = setTimeout(() => {
       if (!state.ending && !state.closing) session.generateReply({ instructions: WRAP_UP });
-    }, MAX_SESSION_MS - 45_000);
+    }, Math.max(0, MAX_SESSION_MS - 45_000));
     // The kiosk keeps every card so it can flip them as she names them, even if deal never arrives.
     send({ type: "cards", cards: state.cards, spreads: SPREADS });
 
