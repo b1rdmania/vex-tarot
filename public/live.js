@@ -10,7 +10,6 @@ const typeBox = $("type");
 const TYPING_PING_MS = 5_000;
 const RESET_AFTER_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 35_000;
-const FOOTNOTE = "An AI in a mirror. For entertainment.";
 const params = new URLSearchParams(location.search);
 const store = { get(key) { try { return localStorage.getItem(key); } catch { return null; } }, set(key, value) { try { localStorage.setItem(key, value); } catch {} } };
 const accessCode = params.get("code") || store.get("vexCode") || "";
@@ -22,15 +21,14 @@ let ready = false, crisis = false, verdict = "";
 let stopDemo = null;
 
 const scene = await createScene(canvas, params.get("room") || undefined);
-scene.room.controlItems.forEach((item, i) => {
-  // The middle slot is the type box.
-  const el = i === 1 ? typeBox : buttons[item.id];
-  if (!el) return;
-  for (const [k, v] of Object.entries({ x: item.rect.x, y: item.rect.y, w: item.rect.width, h: item.rect.height })) el.style.setProperty(`--${k}`, v);
-  const on = () => scene.hover(item.id), off = () => scene.hover(null);
+// Real controls sit over what the canvas draws (scene.layout, native 320x212 pixels).
+for (const [id, el] of Object.entries({ talk: buttons.talk, type: typeBox, leave: buttons.leave })) {
+  const r = scene.layout[id];
+  for (const [k, v] of Object.entries({ x: r.x, y: r.y, w: r.width, h: r.height })) el.style.setProperty(`--${k}`, v);
+  const on = () => scene.hover(id), off = () => scene.hover(null);
   el.addEventListener("pointerenter", on); el.addEventListener("focus", on);
   el.addEventListener("pointerleave", off); el.addEventListener("blur", off);
-});
+}
 // Fill the screen. Above x4 the slight unevenness of a fractional scale is invisible.
 function fit() {
   const room = Math.min(innerWidth / 320, innerHeight / 212);
@@ -51,12 +49,13 @@ function log(...args) {
 function status(text) { $("status-text").textContent = text; scene.status(text); }
 function phase(name) { stage.dataset.phase = name; }
 // One place sets the three controls, for both the canvas and the real buttons.
-function controls({ talk = null, talkOn = true, type = false, leave = null }) {
-  buttons.talk.hidden = !talk; buttons.talk.textContent = talk || ""; buttons.talk.disabled = !talkOn;
+// talk is the large prompt in the middle of the table; it only shows between readings.
+function controls({ talk = null, type = false, leave = null }) {
+  buttons.talk.hidden = !talk; buttons.talk.textContent = talk || "";
   buttons.leave.hidden = !leave; buttons.leave.textContent = leave || "";
   typeBox.disabled = !type;
   if (!type) { typeBox.value = ""; typeBox.blur(); }
-  scene.controls({ talk, talkOn, leave });
+  scene.controls({ talk, leave });
   scene.typing({ enabled: type, value: typeBox.value });
 }
 function schedule(run, callback, delay) {
@@ -127,7 +126,7 @@ function reset() {
   delete stage.dataset.agent;
   question.textContent = subs.textContent = debug.textContent = "";
   $("reading-focus").hidden = $("afterword").hidden = notice.hidden = true;
-  scene.clearCards(); scene.label(""); scene.dim(false); scene.say(""); scene.idle(true); scene.footnote(FOOTNOTE);
+  scene.clearCards(); scene.label(""); scene.dim(false); scene.say("");
   stage.dataset.state = "idle";
   phase("idle");
   controls({ talk: "Talk to Vex" });
@@ -157,9 +156,8 @@ async function start() {
   current = run;
   stage.dataset.state = "session";
   phase("connecting");
-  scene.idle(false); scene.footnote("");
   scene.say("One moment, mortal.", { mime: true });
-  controls({ talk: "Talk to Vex", talkOn: false, type: true, leave: "Leave" });
+  controls({ type: true, leave: "Leave" });
   $("intro").textContent = "Allow your microphone when asked. Sit close and speak normally.";
   status("Allow your microphone. Connecting...");
   run.watchdog = schedule(run, () => fail(run, "Vex hasn’t answered. Check your connection and try again."), CONNECT_TIMEOUT_MS);
@@ -289,7 +287,7 @@ function finish(run, reason) {
   $("afterword").hidden = !verdict;
   scene.say(verdict || closing, { persistent: true });
   scene.react("smirk");
-  controls({ talk: "Talk to Vex", leave: "Next guest" });
+  controls({ leave: "Next guest" });
   status(spread ? "Your cards stay for 30 seconds. Take a photo." : "Ready for the next guest.");
   schedule(run, reset, RESET_AFTER_MS);
 }
@@ -314,7 +312,7 @@ function deal(run, name, q) {
   });
   scene.deal(positions);
   scene.label(q ? `"${q}"` : "The cards are on the table.");
-  controls({ talk: "Talk to Vex", talkOn: false, type: true, leave: "Leave" });
+  controls({ type: true, leave: "Leave" });
   log("deal", name);
 }
 function turn(i, card) {

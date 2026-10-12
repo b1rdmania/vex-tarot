@@ -60,9 +60,7 @@ export function currentPhrase(text, maxChars, maxLines) {
 }
 
 export async function createScene(canvas, roomId = "01-velvet-alcove") {
-  const [palette, sheet, room, idle] = await Promise.all([
-    json("palette.json"), json("sprites/vex-sheet.json"), json(`rooms/${roomId}.json`), json("idle-dialogue.json"),
-  ]);
+  const [palette, sheet, room] = await Promise.all([json("palette.json"), json("sprites/vex-sheet.json"), json(`rooms/${roomId}.json`)]);
   const [atlas, plate] = await Promise.all([loadImage(BASE + "sprites/vex-sheet.png"), loadImage(BASE + "rooms/" + room.background)]);
   const colour = (i) => palette.colors[i];
   const ctx = canvas.getContext("2d");
@@ -117,11 +115,10 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
   const state = {
     voice: 0, mouth: 0, mouthAt: 0,
     speech: [], speechUntil: 0, speechAt: 0, mime: 0, persistent: false,
-    idleLines: false, idleIndex: 0, idleNext: 0,
     reaction: null, blinkAt: 0, blinkStart: -1,
     spread: [], lit: -1, hand: null, reveal: null,
-    label: "", status: "", footnote: "",
-    controls: { talk: "Talk to Vex", talkOn: true, leave: null }, hover: null,
+    label: "", status: "",
+    controls: { talk: "Talk to Vex", leave: null }, hover: null,
     typing: { value: "", focused: false, enabled: false }, speechColour: C.speech, dimmed: false,
   };
 
@@ -219,6 +216,14 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     drawCard({ face: r.card, faceAt: 0 }, "lg", r.x, r.y, now);
   }
 
+  // Bottom row: a wide type box (Codex's first two slots) and Leave. Before a reading,
+  // a large Talk to Vex prompt sits in the middle of the table instead.
+  const [slotA, slotB, slotC] = room.controlItems.map((item) => item.rect);
+  const layout = {
+    type: { x: slotA.x, y: slotA.y, width: slotB.x + slotB.width - slotA.x, height: slotA.height },
+    leave: slotC,
+    talk: (() => { const t = room.rects.table, w = 150, h = 34; return { x: Math.round(t.x + t.width / 2 - w / 2), y: Math.round(t.y + t.height / 2 - h / 2), width: w, height: h }; })(),
+  };
   function typedLabel(rect) {
     const t = state.typing;
     if (!t.enabled || (!t.value && !t.focused)) return "Type to Vex";
@@ -227,17 +232,24 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     return `> ${normalise(t.value).slice(-room)}${caret}`;
   }
   function drawControls() {
-    const items = room.controlItems;
-    items.forEach((item, i) => {
-      // The middle slot (Codex's "inspect" rect) is the type box.
-      const typeSlot = i === 1;
-      const label = typeSlot ? typedLabel(item.rect) : item.id === "talk" ? state.controls.talk : state.controls.leave;
-      if (!label) return;
-      const enabled = typeSlot ? state.typing.enabled : item.id === "talk" ? state.controls.talkOn : true;
-      const index = !enabled ? C.dim : typeSlot && state.typing.value ? C.hover : state.hover === item.id ? C.hover : C.label;
-      text(label, item.rect.x + item.rect.width / 2, item.rect.y + 4, index, { align: "center" });
-      if (i > 0) { const prev = items[i - 1].rect; ctx.fillStyle = colour(C.dim); ctx.fillRect(Math.round((prev.x + prev.width + item.rect.x) / 2), item.rect.y + 3, 1, 9); }
-    });
+    const t = state.typing;
+    if (t.enabled) {
+      const r = layout.type;
+      text(typedLabel(r), r.x + r.width / 2, r.y + 4, t.value ? C.hover : state.hover === "type" ? C.hover : C.label, { align: "center" });
+    }
+    if (state.controls.leave) {
+      const r = layout.leave;
+      text(state.controls.leave, r.x + r.width / 2, r.y + 4, state.hover === "leave" ? C.hover : C.label, { align: "center" });
+      if (t.enabled) { ctx.fillStyle = colour(C.dim); ctx.fillRect(r.x - 6, r.y + 3, 1, 9); }
+    }
+    if (state.controls.talk && !state.dimmed) {
+      const r = layout.talk;
+      ctx.fillStyle = colour(C.gold); ctx.fillRect(r.x - 1, r.y - 1, r.width + 2, r.height + 2);
+      ctx.fillStyle = colour(C.ink); ctx.fillRect(r.x, r.y, r.width, r.height);
+      const img = textImage(normalise(state.controls.talk), state.hover === "talk" ? C.hover : C.label);
+      ctx.drawImage(img, Math.round(r.x + r.width / 2 - img.width), r.y + 5, img.width * 2, img.height * 2);
+      text("or press space", r.x + r.width / 2, r.y + 24, C.muted, { align: "center" });
+    }
   }
 
   function draw(now) {
@@ -253,17 +265,11 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     if (!state.dimmed) drawSpeech(now);
     drawControls();
     ctx.fillStyle = colour(C.ink); ctx.fillRect(0, ROOM_H, W, H - ROOM_H);
-    const strip = state.status || state.footnote;
-    if (strip) text(strip.slice(0, 52), W / 2, ROOM_H + 3, C.muted, { align: "center" });
+    if (state.status) text(state.status.slice(0, 52), W / 2, ROOM_H + 3, C.muted, { align: "center" });
   }
 
   function drawSpeech(now) {
     if (!state.persistent && state.speech.length && now > state.speechUntil) state.speech = [];
-    if (!state.speech.length && state.idleLines && now > state.idleNext) {
-      const line = idle.lines[state.idleIndex++ % idle.lines.length];
-      say(line);
-      state.idleNext = state.speechUntil + 1200;
-    }
     speechLines(now).forEach((line, i) => text(line, speechRect.x + speechRect.width / 2, speechRect.y + room.speech.padding + i * 9, state.speechColour, { align: "center" }));
   }
 
@@ -291,10 +297,10 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
   }
   const scene = {
     room,
+    layout,
     say,
     silence() { state.voice = 0; },
     voice(level) { state.voice = level > state.voice ? state.voice * 0.4 + level * 0.6 : state.voice * 0.75 + level * 0.25; },
-    idle(on) { state.idleLines = on; state.idleNext = performance.now() + 600; },
     react(name) {
       const r = sheet.reactions[name];
       if (r) state.reaction = { name, until: performance.now() + r.holdMs, rest: r.restMouth || null };
@@ -315,7 +321,6 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     clearCards() { state.spread = []; state.lit = -1; state.hand = null; state.reveal = null; },
     label(str) { state.label = str || ""; },
     status(str) { state.status = str || ""; },
-    footnote(str) { state.footnote = str || ""; },
     controls(next) { Object.assign(state.controls, next); },
     typing(next) { Object.assign(state.typing, next); },
     hover(id) { state.hover = id; },
