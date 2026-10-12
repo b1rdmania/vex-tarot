@@ -4,7 +4,10 @@
 
 const W = 320, ROOM_H = 200, H = 212;
 const BASE = "/retro/";
-const CARD = { sm: [18, 30], md: [44, 76], lg: [60, 103] };
+// Card sizes in native pixels. Card art is built at CARD_RES times this, so cards
+// carry finer detail than the room. xs is the table size for long spreads.
+const CARD = { xs: [18, 30], sm: [22, 38], md: [44, 76], lg: [60, 103] };
+const CARD_RES = 2;
 const C = { ink: 0, shade: 1, dim: 4, muted: 5, speech: 7, label: 30, hover: 27, gold: 25, back: 3, line: 29 };
 
 // 5x7 bitmap font. A-Z and ' . , ? come from art/scripts/build.mjs; the rest is added here.
@@ -63,7 +66,10 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
   const [atlas, plate] = await Promise.all([loadImage(BASE + "sprites/vex-sheet.png"), loadImage(BASE + "rooms/" + room.background)]);
   const colour = (i) => palette.colors[i];
   const ctx = canvas.getContext("2d");
-  canvas.width = W; canvas.height = H;
+  // The backing store is CARD_RES times native; everything else is drawn at native
+  // coordinates and scaled up whole, so only the card art gains detail.
+  canvas.width = W * CARD_RES; canvas.height = H * CARD_RES;
+  ctx.setTransform(CARD_RES, 0, 0, CARD_RES, 0, 0);
   ctx.imageSmoothingEnabled = false;
 
   const sprite = room.rects.sprite, safe = room.safeAreas.cards, speechRect = room.rects.speech;
@@ -146,8 +152,10 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     return sheet.mouth.frames[state.mouth];
   }
 
+  // Five cards get the larger table size; ten need the small one to fit the safe area.
+  const tableSize = () => state.spread.length * (CARD.sm[0] + 2) <= safe.width ? "sm" : "xs";
   function slots() {
-    const n = state.spread.length, [w, h] = CARD.sm;
+    const n = state.spread.length, [w, h] = CARD[tableSize()];
     const gap = n > 1 ? Math.max(1, Math.min(6, Math.floor((safe.width - n * w) / (n - 1)))) : 0;
     const left = safe.x + Math.floor((safe.width - (n * w + (n - 1) * gap)) / 2);
     const top = safe.y + Math.floor((safe.height - h) / 2);
@@ -165,8 +173,8 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     }
     const img = cardImage(size, card.face.img);
     if (!img.complete || !img.naturalWidth) { ctx.fillStyle = colour(C.label); ctx.fillRect(x, y, w, h); return; }
-    if (card.face.reversed) { ctx.save(); ctx.translate(x + w, y + h); ctx.rotate(Math.PI); ctx.drawImage(img, 0, 0); ctx.restore(); }
-    else ctx.drawImage(img, x, y);
+    if (card.face.reversed) { ctx.save(); ctx.translate(x + w, y + h); ctx.rotate(Math.PI); ctx.drawImage(img, 0, 0, w, h); ctx.restore(); }
+    else ctx.drawImage(img, x, y, w, h);
   }
   function outline(r, index) { ctx.fillStyle = colour(index); ctx.fillRect(r.x - 1, r.y - 1, r.w + 2, 1); ctx.fillRect(r.x - 1, r.y + r.h, r.w + 2, 1); ctx.fillRect(r.x - 1, r.y, 1, r.h); ctx.fillRect(r.x + r.w, r.y, 1, r.h); }
 
@@ -238,7 +246,7 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     frame(bodyFrame(now), sprite.x, sprite.y);
     frame(mouthFrame(now), sprite.x, sprite.y);
     const boxes = slots();
-    state.spread.forEach((card, i) => { drawCard(card, "sm", boxes[i].x, boxes[i].y, now); if (i === state.lit && now >= card.faceAt) outline(boxes[i], C.hover); });
+    state.spread.forEach((card, i) => { drawCard(card, tableSize(), boxes[i].x, boxes[i].y, now); if (i === state.lit && now >= card.faceAt) outline(boxes[i], C.hover); });
     drawHand(now);
     drawReveal(now);
     if (state.label) text(state.label.slice(0, 52), W / 2, Math.min(room.rects.table.y + room.rects.table.height, room.rects.controls.y - 9), C.gold, { align: "center" });

@@ -9,8 +9,9 @@ import { join } from "node:path";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const art = join(root, "art");
 const out = join(root, "public/retro");
-// Card sizes in native 320x200 pixels: table thumbnail, inspect view, reveal.
-const SIZES = { sm: [18, 30], md: [44, 76], lg: [60, 103] };
+// Card sizes: native 320x200 pixels x2 (retro.js CARD x CARD_RES), so cards keep
+// finer detail than the room. xs/sm = table, md = inspect view, lg = reveal.
+const SIZES = { xs: [36, 60], sm: [44, 76], md: [88, 152], lg: [120, 206] };
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, "rooms"), { recursive: true });
