@@ -141,10 +141,11 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
 
   // Four mouth frames from smoothed output volume, with a short hold so it doesn't chatter.
   // Thresholds set from a live run (12 Oct): voiced level p25 0.03, p50 0.16, p75 0.43, p95 0.78.
+  // The widest mouth (teeth) is never used: Andy found it odd. Loud speech holds at "open".
   function mouthFrame(now) {
     let target;
-    if (state.mime && now < state.mime) target = [1, 2, 0, 3, 1, 0, 2][Math.floor(now / 90) % 7];
-    else { const v = state.voice; target = v < 0.06 ? 0 : v < 0.22 ? 1 : v < 0.5 ? 2 : 3; }
+    if (state.mime && now < state.mime) target = [1, 2, 0, 2, 1, 0, 2][Math.floor(now / 90) % 7];
+    else { const v = state.voice; target = v < 0.06 ? 0 : v < 0.22 ? 1 : 2; }
     if (target !== state.mouth && now - state.mouthAt > 70) { state.mouth = target; state.mouthAt = now; }
     if (state.mouth === 0 && state.reaction?.rest && now < state.reaction.until) return state.reaction.rest;
     return sheet.mouth.frames[state.mouth];
