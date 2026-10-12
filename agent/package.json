@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --env-file=.env agent.js dev",
+    "dev": "node --env-file=.env agent.js dev --log-level info",
     "start": "node agent.js start"
   },
   "dependencies": {

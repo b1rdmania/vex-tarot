@@ -1,21 +1,31 @@
-// Which cards has Vex reached? Shared by the kiosk (to flip cards as she says
-// them) and the worker (to end the session after the last one).
-// She reads in order, so only the next card or the one after it can match.
-// That keeps "the world" in a stray sentence from flipping card five early.
-const key = (name) => name.toLowerCase().replace(/^the /, "");
+// Recognise deliberate announcements, not card names embedded in conversation.
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const boundary = "(?:^|[.!?]\\s+|\\n\\s*)";
+
+export function readingStart(text) {
+  if (new RegExp(`${boundary}The Celtic Cross is on the table[.!]`, "i").test(text)) return "celtic";
+  if (new RegExp(`${boundary}The cards are on the table[.!]`, "i").test(text)) return "short";
+  return null;
+}
 
 export function advance(text, cards, next) {
-  const said = text.toLowerCase();
   let at = 0;
   while (next < cards.length) {
-    let found = -1, j;
-    for (j = next; j < Math.min(next + 2, cards.length); j++) {
-      found = said.indexOf(key(cards[j].name), at);
-      if (found >= 0) break;
-    }
-    if (found < 0) break;
-    at = found + 1;
-    next = j + 1;
+    const card = cards[next];
+    // Require the full name, its announced orientation, and punctuation. Waiting
+    // for punctuation also prevents a partial transcription from flipping a card.
+    const orientation = card.reversed ? "reversed" : "upright";
+    const announcement = new RegExp(`${boundary}${escape(card.name)}\\s*[,.:—–-]\\s*${orientation}\\s*[.!:—–-]`, "ig");
+    announcement.lastIndex = at;
+    const match = announcement.exec(text);
+    if (!match) break;
+    at = match.index + match[0].length - 1;
+    next++;
   }
   return next;
+}
+
+export function lastSentence(text) {
+  const sentences = text.trim().match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+  return (sentences.at(-1) || "").trim().slice(0, 280);
 }

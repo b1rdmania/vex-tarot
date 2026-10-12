@@ -1,204 +1,298 @@
-// Vex kiosk, live session. Joins a LiveKit room; the `vex` worker joins too.
-// The worker sends table events on the "vex" data topic; this page draws them.
 import { Room, RoomEvent, Track } from "./vendor/livekit-client.esm.mjs";
-import { advance } from "./spoken.js";
+import { advance, readingStart } from "./spoken.js";
 
 const $ = (id) => document.getElementById(id);
 const stage = $("stage"), portal = $("portal"), face = $("face"), table = $("table");
 const subs = $("subs"), question = $("question"), prompt = $("prompt"), debug = $("debug");
-const PROMPT = prompt.innerHTML;
-const RESET_AFTER_MS = 12_000;
-// The access code arrives once in the link (?code=...) and is kept for reloads.
-const accessCode = new URLSearchParams(location.search).get("code") || localStorage.getItem("vexCode") || "";
-if (accessCode) localStorage.setItem("vexCode", accessCode);
-
-let room = null;
+const RESET_AFTER_MS = 30_000;
+const CONNECT_TIMEOUT_MS = 35_000;
+const store = { get(key) { try { return localStorage.getItem(key); } catch { return null; } }, set(key, value) { try { localStorage.setItem(key, value); } catch {} } };
+const accessCode = new URLSearchParams(location.search).get("code") || store.get("vexCode") || "";
+if (accessCode) store.set("vexCode", accessCode);
+let current = null;
 let started = 0;
-let mouthStop = null;
-// The worker sends every card at the start. A card flips when her subtitles
-// reach its name, so the table follows her voice, not the model's tool calls.
-let deck = null; // { cards, spreads }
-let spread = null; // the dealt cards, in order
-let flipped = 0;
+let captions = store.get("vexCaptions") === "1";
+let deck = null, spread = null, positions = null, flipped = 0;
+let ready = false, crisis = false, verdict = "";
 
 function log(...args) {
-  const line = `${((performance.now() - started) / 1000).toFixed(1).padStart(6)}s  ${args.join(" ")}`;
+  const line = `${((performance.now() - started) / 1000).toFixed(1)}s ${args.join(" ")}`;
   console.log("[vex]", line);
   debug.textContent = `${line}\n${debug.textContent}`.slice(0, 6000);
 }
-
-addEventListener("keydown", (e) => {
-  if (e.code === "Space" && !e.repeat) { e.preventDefault(); if (stage.dataset.state === "idle") start(); }
-  if (e.key === "d") debug.hidden = !debug.hidden;
-  if (e.key === "Escape" && room) room.disconnect();
+function status(text) { $("status-text").textContent = text; }
+function phase(name) { stage.dataset.phase = name; }
+function schedule(run, callback, delay) {
+  const timer = setTimeout(() => { run.timers.delete(timer); if (current === run) callback(); }, delay);
+  run.timers.add(timer);
+  return timer;
+}
+function clearTimers(run) { for (const timer of run.timers) clearTimeout(timer); run.timers.clear(); }
+function setCaptions() {
+  $("captions").textContent = captions ? "Captions on" : "Captions off";
+  $("captions").setAttribute("aria-pressed", String(captions));
+  subs.hidden = !captions;
+}
+setCaptions();
+$("captions").addEventListener("click", () => { captions = !captions; store.set("vexCaptions", captions ? "1" : "0"); setCaptions(); });
+addEventListener("keydown", (event) => {
+  const interactive = event.target.closest?.("button, a, input, textarea, select");
+  if (event.code === "Space" && !event.repeat && !interactive && stage.dataset.state === "idle") { event.preventDefault(); start(); }
+  if (event.key === "d" && !interactive) debug.hidden = !debug.hidden;
+  if (event.key === "Escape" && current && !current.closing) finish(current, "cancelled");
 });
-prompt.addEventListener("click", () => stage.dataset.state === "idle" && start());
+prompt.addEventListener("click", start);
+$("end").addEventListener("click", () => current && finish(current, "cancelled"));
+$("again").addEventListener("click", reset);
 
+function release(run) {
+  if (!run || run.closing) return;
+  run.closing = true;
+  clearTimers(run);
+  run.abort.abort();
+  run.mouthStop?.();
+  run.mouthStop = null;
+  // Detach before disconnecting; late SDK events cannot touch the next guest.
+  run.audio.forEach((el) => el.remove());
+  run.audio.clear();
+  Promise.resolve(run.room?.disconnect()).catch(() => {});
+  face.srcObject = null;
+  portal.classList.remove("has-video");
+  portal.style.removeProperty("--voice");
+}
+function reset() {
+  release(current);
+  if (current) clearTimers(current);
+  current = null;
+  deck = spread = positions = null;
+  flipped = 0; ready = crisis = false; verdict = "";
+  table.replaceChildren();
+  delete table.dataset.count;
+  delete stage.dataset.agent;
+  question.textContent = subs.textContent = debug.textContent = "";
+  $("reading-focus").hidden = $("afterword").hidden = true;
+  $("invitation").hidden = false;
+  $("end").hidden = $("again").hidden = true;
+  $("chapter").textContent = "A private audience";
+  $("headline").innerHTML = "Your future.<br>My condolences.";
+  $("intro").innerHTML = "Sit close. Tell me what’s on your mind.<br>I’ll consult the cards. And judge you a little.";
+  prompt.textContent = "Take a seat ↗";
+  prompt.hidden = $("hint").hidden = false;
+  stage.dataset.state = "idle";
+  phase("idle");
+  status("Ready when you are.");
+}
+function fail(run, message) {
+  if (current !== run || run.closing) return;
+  release(run);
+  stage.dataset.state = "idle";
+  phase("error");
+  $("reading-focus").hidden = $("afterword").hidden = true;
+  $("invitation").hidden = false;
+  $("chapter").textContent = "A disturbance in the connection";
+  $("headline").textContent = "The spirits are offline.";
+  $("intro").textContent = message;
+  prompt.textContent = "Try again ↗";
+  prompt.hidden = false;
+  $("hint").hidden = $("end").hidden = true;
+  status(message);
+}
 async function start() {
-  stage.dataset.state = "session";
+  if (stage.dataset.state !== "idle") return;
+  reset();
   started = performance.now();
-  subs.textContent = "";
-  question.textContent = "";
+  const run = { room: null, abort: new AbortController(), timers: new Set(), audio: new Set(), closing: false, heardAgent: false };
+  current = run;
+  stage.dataset.state = "session";
+  phase("connecting");
+  prompt.hidden = $("hint").hidden = true;
+  $("end").hidden = false;
+  $("headline").textContent = "One moment, mortal.";
+  $("intro").textContent = "Allow your microphone when asked. Sit close and speak normally.";
+  status("Connecting to Vex…");
+  run.watchdog = schedule(run, () => fail(run, "Vex hasn’t answered. Check your connection and try again."), CONNECT_TIMEOUT_MS);
   try {
-    const res = await fetch("/api/token", { method: "POST", headers: { "X-Vex-Code": accessCode } });
-    if (!res.ok) throw new Error(`token ${res.status}`);
-    const { url, token, room: name } = await res.json();
-    log("room", name);
-    room = new Room({ adaptiveStream: true, dynacast: true });
-    wire(room);
+    const res = await fetch("/api/token", { method: "POST", headers: { "X-Vex-Code": accessCode }, signal: run.abort.signal });
+    if (!res.ok) throw new Error(res.status === 401 ? "This invitation needs a valid access code. Open the link your host gave you." : "We couldn’t start the reading. Please try again.");
+    const { url, token } = await res.json();
+    if (current !== run || run.closing) return;
+    const room = run.room = new Room({ adaptiveStream: true, dynacast: true });
+    wire(run);
     await room.connect(url, token);
+    if (current !== run || run.closing) { await room.disconnect(); return; }
     await room.localParticipant.setMicrophoneEnabled(true, { echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+    if (current !== run || run.closing) { await room.disconnect(); return; }
+    run.micReady = true;
+    if (run.heardAgent) { clearTimeout(run.watchdog); run.timers.delete(run.watchdog); }
     log("connected, mic on");
-    subs.textContent = "…";
+    if (!run.heardAgent) status("Microphone ready. Waiting for Vex…");
   } catch (err) {
-    log("start failed:", err.message);
-    subs.textContent = "The spirits are offline. Find a human.";
-    setTimeout(reset, 5000);
+    if (current !== run || run.closing) return;
+    log("start failed", err.name || "Error");
+    const message = err.name === "NotAllowedError" ? "Microphone access was denied. Allow it in your browser, then try again." : err.name === "NotFoundError" ? "No microphone was found. Connect one, then try again." : err.message;
+    fail(run, message || "We couldn’t connect. Please try again.");
   }
 }
-
-function wire(r) {
-  r.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
-    log("track", track.kind, "from", participant.identity);
-    if (track.kind === Track.Kind.Video) {
-      track.attach(face);
-      portal.classList.add("has-video");
-    } else if (track.kind === Track.Kind.Audio) {
-      const el = track.attach();
-      el.dataset.vex = "";
-      document.body.appendChild(el);
-      animateMouth(track.mediaStreamTrack);
+function agentArrived(run) {
+  if (run.heardAgent) return;
+  run.heardAgent = true;
+  if (run.micReady) { clearTimeout(run.watchdog); run.timers.delete(run.watchdog); }
+  if (crisis || spread) return;
+  phase("conversation");
+  $("chapter").textContent = "The introduction";
+  $("headline").textContent = "Tell me everything.";
+  $("intro").textContent = "Speak naturally. You can interrupt her. She’ll cope.";
+  status("Vex is here. Say hello.");
+}
+function wire(run) {
+  const room = run.room;
+  const active = () => current === run && !run.closing;
+  room.on(RoomEvent.TrackSubscribed, (track) => {
+    if (!active()) return;
+    if (track.kind === Track.Kind.Video) { track.attach(face); portal.classList.add("has-video"); }
+    if (track.kind === Track.Kind.Audio) {
+      const el = track.attach(); el.dataset.vex = ""; document.body.appendChild(el); run.audio.add(el);
+      animateMirror(run, track.mediaStreamTrack);
     }
   });
-  r.on(RoomEvent.TrackUnsubscribed, (track) => {
-    track.detach().forEach((el) => el !== face && el.remove());
+  room.on(RoomEvent.TrackUnsubscribed, (track) => {
+    if (!active()) return;
+    track.detach().forEach((el) => { if (el !== face) { el.remove(); run.audio.delete(el); } });
     if (track.kind === Track.Kind.Video) portal.classList.remove("has-video");
   });
-  r.on(RoomEvent.DataReceived, (payload, _p, _k, topic) => {
-    if (topic !== "vex") return;
-    const msg = JSON.parse(new TextDecoder().decode(payload));
-    if (msg.type !== "state") log("event", msg.type, msg.index ?? "", msg.card?.name ?? "");
-    onEvent(msg);
+  room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+    if (!active() || topic !== "vex" || participant?.identity === room.localParticipant.identity) return;
+    try { onEvent(run, JSON.parse(new TextDecoder().decode(payload))); } catch { log("invalid table event"); }
   });
-  r.registerTextStreamHandler("lk.transcription", async (reader, from) => {
-    if (from.identity === r.localParticipant.identity) return; // the guest's own words
+  room.registerTextStreamHandler("lk.transcription", async (reader, from) => {
+    if (!active() || from.identity === room.localParticipant.identity) return;
     let text = "";
-    for await (const chunk of reader) {
-      text += chunk;
-      subs.textContent = tail(text);
-      flipIfSpoken(text);
-    }
+    try {
+      for await (const chunk of reader) {
+        if (!active()) return;
+        text += chunk;
+        agentArrived(run);
+        subs.textContent = tail(text);
+        if (crisis) continue;
+        if (!spread && ready) {
+          const announced = readingStart(text);
+          if (announced) deal(run, announced);
+        }
+        if (!spread) continue;
+        const reached = advance(text, spread, flipped);
+        for (; flipped < reached; flipped++) turn(flipped, spread[flipped]);
+      }
+    } catch { if (active()) log("caption stream interrupted"); }
   });
-  r.on(RoomEvent.Disconnected, () => {
-    log("disconnected");
-    prompt.textContent = "";
-    setTimeout(reset, RESET_AFTER_MS);
+  room.on(RoomEvent.Reconnecting, () => { if (active()) { status("Connection lost. Reconnecting…"); clearTimeout(run.reconnectTimer); run.timers.delete(run.reconnectTimer); run.reconnectTimer = schedule(run, () => fail(run, "The connection could not be restored. Please try again."), CONNECT_TIMEOUT_MS); } });
+  room.on(RoomEvent.Reconnected, () => { if (active()) { clearTimeout(run.reconnectTimer); run.timers.delete(run.reconnectTimer); status("Connected again. Carry on."); } });
+  room.on(RoomEvent.Disconnected, () => {
+    if (!active()) return;
+    if (verdict || crisis) finish(run, crisis ? "crisis" : "complete");
+    else fail(run, "The connection ended before the reading finished. Please try again.");
   });
 }
-
-function onEvent(msg) {
-  if (msg.type === "state") stage.dataset.agent = msg.state;
-  if (msg.type === "cards") deck = msg;
-  // The worker is closing the session. Hang up here too, in case it can't delete the room.
-  if (msg.type === "end") setTimeout(() => room?.disconnect(), 1000);
-  if (msg.type === "deal") deal(msg.spread, msg.question);
-  if (msg.type === "crisis") table.replaceChildren();
+function onEvent(run, msg) {
+  if (msg.type === "state") {
+    if (["listening", "thinking", "speaking"].includes(msg.state)) agentArrived(run);
+    stage.dataset.agent = msg.state;
+    if (!crisis) status(({ listening: "Vex is listening. Your turn.", thinking: "Vex is considering her response…", speaking: "Vex is speaking. You can interrupt." })[msg.state] || "Connecting to Vex…");
+  }
+  if (msg.type === "cards") { deck = msg; if (run.pendingDeal) { deal(run, run.pendingDeal.spread, run.pendingDeal.question); run.pendingDeal = null; } }
+  if (msg.type === "reading-ready") ready = true;
+  if (msg.type === "deal" && !crisis) { agentArrived(run); if (!deck) run.pendingDeal = msg; else deal(run, msg.spread, msg.question); }
+  if (msg.type === "verdict" && !crisis) { verdict = msg.text || ""; $("verdict").textContent = verdict; }
+  if (msg.type === "end") { if (msg.verdict && !crisis) verdict = msg.verdict; finish(run, msg.reason || "complete"); }
+  if (msg.type === "crisis") {
+    crisis = true; verdict = ""; spread = null;
+    table.replaceChildren();
+    $("reading-focus").hidden = $("afterword").hidden = true;
+    $("invitation").hidden = false;
+    prompt.hidden = true;
+    phase("crisis");
+    $("chapter").textContent = "The reading is paused";
+    $("headline").textContent = "Let’s stop the cards here.";
+    $("intro").textContent = msg.text || "Please find your host or someone you trust to talk to.";
+    status("Take your time. Your host can help.");
+  }
 }
-
-function deal(name, q) {
-  if (spread || !deck) return;
-  const positions = deck.spreads[name] || deck.spreads.short;
+function finish(run, reason) {
+  if (current !== run || run.closing) return;
+  if (reason === "error") { fail(run, "Vex lost her connection. Please try again."); return; }
+  release(run);
+  subs.textContent = "";
+  $("end").hidden = true;
+  $("again").hidden = false;
+  delete stage.dataset.agent;
+  if (crisis || reason === "crisis") { phase("crisis"); status("Take your time. Choose Next guest when you’re ready."); return; }
+  phase("verdict");
+  $("reading-focus").hidden = true;
+  $("invitation").hidden = false;
+  $("chapter").textContent = "The audience is over";
+  $("headline").textContent = reason === "complete" ? "The cards have spoken." : "We’ll leave it there.";
+  $("intro").textContent = reason === "timeout" ? "Our time is up. Take a breath before your next reading." : reason === "away" ? "Gone, then. The cards will remember." : reason === "cancelled" ? "Your reading has ended." : "Your future is now your problem.";
+  $("verdict").textContent = verdict;
+  $("afterword").hidden = !verdict;
+  prompt.hidden = true;
+  status(spread ? "Your cards will stay for 30 seconds. Take a photograph." : "Ready for the next guest.");
+  schedule(run, reset, RESET_AFTER_MS);
+}
+function deal(run, name, q) {
+  if (spread || !deck || crisis || run.closing) return;
+  positions = deck.spreads[name] || deck.spreads.short;
   spread = deck.cards.slice(0, positions.length);
-  log("deal", name);
+  phase("reading");
+  $("invitation").hidden = true;
+  $("reading-focus").hidden = false;
+  $("hero-image").hidden = true;
+  $("hero-name").textContent = "Let’s see what follows you.";
+  $("hero-position").textContent = "The cards are on the table";
+  $("hero-orientation").textContent = "";
   question.textContent = q ? `“${q}”` : "";
   table.dataset.count = positions.length;
   table.replaceChildren();
   positions.forEach((pos, i) => {
-    if (positions.length === 10 && i === 5) table.append(Object.assign(document.createElement("div"), { className: "break" }));
-    const slot = document.createElement("div");
-    slot.className = "slot";
-    slot.innerHTML = `<div class="pos">${pos}</div><div class="card"><div class="inner"><div class="back"></div><div class="front"><img alt=""></div></div></div><div class="name"></div>`;
+    const slot = document.createElement("div"); slot.className = "slot";
+    slot.innerHTML = '<div class="card"><div class="inner"><div class="back"></div><div class="front"><img alt=""></div></div></div><div class="name"></div>';
+    slot.querySelector(".name").textContent = `${i + 1}. ${pos}`;
+    slot.setAttribute("aria-label", `Card ${i + 1}: ${pos}, face down`);
     table.append(slot);
-    setTimeout(() => slot.querySelector(".card").classList.add("dealt"), 250 + i * 220);
+    schedule(run, () => slot.querySelector(".card").classList.add("dealt"), i * 100);
   });
+  log("deal", name);
 }
-
-// Show only what she is saying now: the last sentence or two, about two lines.
-function tail(text, max = 150) {
-  const sentences = text.match(/[^.!?]+[.!?]*\s*/g) || [text];
-  let out = "";
-  for (let i = sentences.length - 1; i >= 0; i--) {
-    if (out && (sentences[i] + out).length > max) break;
-    out = sentences[i] + out;
-  }
-  return out.trim();
-}
-
-function flipIfSpoken(text) {
-  if (!deck) return;
-  // No deal from the worker but she has started reading: lay the short spread now.
-  if (!spread && advance(text, deck.cards.slice(0, deck.spreads.short.length), 0)) deal("short");
-  if (!spread) return;
-  const reached = advance(text, spread, flipped);
-  // Let the deal animation land before the first flip.
-  for (; flipped < reached; flipped++) {
-    const i = flipped;
-    setTimeout(() => turn(i, spread[i]), table.dataset.dealt ? 0 : 1400);
-  }
-  table.dataset.dealt = "1";
-}
-
-function turn(i, c) {
-  const slots = table.querySelectorAll(".slot");
-  const slot = slots[i];
+function turn(i, card) {
+  const slots = table.querySelectorAll(".slot"), slot = slots[i];
   if (!slot) return;
   slots.forEach((s) => s.querySelector(".card").classList.remove("lit"));
   const front = slot.querySelector(".front");
-  front.classList.toggle("reversed", c.reversed);
-  front.querySelector("img").src = `/cards/${c.img}`;
-  slot.querySelector(".name").textContent = c.reversed ? `${c.name}, reversed` : c.name;
-  const card = slot.querySelector(".card");
-  card.classList.add("flipped", "lit");
-  log("flip", i, c.name);
+  front.classList.toggle("reversed", card.reversed);
+  const img = front.querySelector("img"); img.src = `/cards/${card.img}`; img.alt = card.name;
+  slot.querySelector(".name").textContent = card.name;
+  slot.setAttribute("aria-label", `${positions[i]}: ${card.name}, ${card.reversed ? "reversed" : "upright"}`);
+  slot.querySelector(".card").classList.add("dealt", "flipped", "lit");
+  const hero = $("hero-image"); hero.src = img.src; hero.alt = `${card.name}, ${card.reversed ? "reversed" : "upright"}`; hero.hidden = false;
+  $("hero-card").classList.toggle("reversed", card.reversed);
+  $("hero-position").textContent = `${i + 1} / ${spread.length} · ${positions[i]}`;
+  $("hero-name").textContent = card.name;
+  $("hero-orientation").textContent = card.reversed ? "Reversed" : "Upright";
+  log("flip", i, card.name);
 }
-
-// Stand-in face: open the mouth with her audio level when there is no video.
-function animateMouth(mediaTrack) {
-  mouthStop?.();
-  const ctx = new AudioContext();
-  const src = ctx.createMediaStreamSource(new MediaStream([mediaTrack]));
-  const an = ctx.createAnalyser();
-  an.fftSize = 512;
-  src.connect(an);
-  const buf = new Uint8Array(an.fftSize);
-  const mouth = $("mouth");
-  let raf;
-  const tick = () => {
-    an.getByteTimeDomainData(buf);
-    let sum = 0;
-    for (const v of buf) sum += (v - 128) ** 2;
-    const level = Math.min(1, Math.sqrt(sum / buf.length) / 28);
-    mouth.setAttribute("ry", (2.2 + level * 7).toFixed(2));
-    raf = requestAnimationFrame(tick);
-  };
-  tick();
-  mouthStop = () => { cancelAnimationFrame(raf); ctx.close(); };
-}
-
-function reset() {
-  deck = spread = null;
-  flipped = 0;
-  delete table.dataset.dealt;
-  mouthStop?.();
-  mouthStop = null;
-  room = null;
-  document.querySelectorAll("audio[data-vex]").forEach((el) => el.remove());
-  portal.classList.remove("has-video");
-  table.replaceChildren();
-  delete table.dataset.count;
-  delete stage.dataset.agent;
-  subs.textContent = "";
-  question.textContent = "";
-  prompt.innerHTML = PROMPT;
-  stage.dataset.state = "idle";
+function tail(text) { return (text.match(/[^.!?]+[.!?]*\s*/g) || [text]).slice(-2).join("").trim(); }
+function animateMirror(run, mediaTrack) {
+  run.mouthStop?.();
+  try {
+    const ctx = new AudioContext();
+    const source = ctx.createMediaStreamSource(new MediaStream([mediaTrack]));
+    const analyser = ctx.createAnalyser(); analyser.fftSize = 512; source.connect(analyser);
+    const samples = new Uint8Array(analyser.fftSize); let raf;
+    const tick = () => {
+      analyser.getByteTimeDomainData(samples);
+      const level = Math.min(1, Math.sqrt(samples.reduce((sum, value) => sum + (value - 128) ** 2, 0) / samples.length) / 28);
+      portal.style.setProperty("--voice", level.toFixed(2));
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+    run.mouthStop = () => { cancelAnimationFrame(raf); source.disconnect(); ctx.close().catch(() => {}); };
+  } catch { log("mirror audio animation unavailable"); }
 }
