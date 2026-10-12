@@ -5,8 +5,8 @@
 const W = 320, ROOM_H = 200, H = 212;
 const BASE = "/retro/";
 // Card sizes in native pixels. Card art is built at CARD_RES times this, so cards
-// carry finer detail than the room. xs is the table size for long spreads.
-const CARD = { xs: [18, 30], sm: [22, 38], md: [44, 76], lg: [60, 103] };
+// carry finer detail than the room. xs is the table size for long spreads, lg the reveal.
+const CARD = { xs: [18, 30], sm: [22, 38], lg: [60, 103] };
 const CARD_RES = 2;
 const C = { ink: 0, shade: 1, dim: 4, muted: 5, speech: 7, label: 30, hover: 27, gold: 25, back: 3, line: 29 };
 
@@ -121,8 +121,8 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     reaction: null, blinkAt: 0, blinkStart: -1,
     spread: [], lit: -1, hand: null, reveal: null,
     label: "", status: "", footnote: "",
-    controls: { talk: "Talk to Vex", talkOn: true, inspect: false, leave: null }, hover: null,
-    inspecting: false, focus: 0, dimmed: false,
+    controls: { talk: "Talk to Vex", talkOn: true, leave: null }, hover: null,
+    typing: { value: "", focused: false, enabled: false }, speechColour: C.speech, dimmed: false,
   };
 
   function bodyFrame(now) {
@@ -219,39 +219,22 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     drawCard({ face: r.card, faceAt: 0 }, "lg", r.x, r.y, now);
   }
 
-  function inspectLayout() {
-    const n = state.spread.length, [w, h] = CARD.md, perRow = 5, gap = 8;
-    const rows = Math.ceil(n / perRow);
-    const top = rows === 1 ? 44 : 22;
-    return state.spread.map((_, i) => {
-      const row = Math.floor(i / perRow), inRow = Math.min(perRow, n - row * perRow), col = i % perRow;
-      const left = Math.floor((W - (inRow * w + (inRow - 1) * gap)) / 2);
-      return { x: left + col * (w + gap), y: top + row * (h + 6), w, h };
-    });
+  function typedLabel(rect) {
+    const t = state.typing;
+    if (!t.enabled || (!t.value && !t.focused)) return "Type to Vex";
+    const caret = t.focused && Math.floor(performance.now() / 500) % 2 ? "_" : " ";
+    const room = Math.floor(rect.width / 6) - 3;
+    return `> ${normalise(t.value).slice(-room)}${caret}`;
   }
-  function drawInspect(now) {
-    stipple(0, 0, W, room.rects.controls.y);
-    const boxes = inspectLayout();
-    state.spread.forEach((card, i) => {
-      const b = boxes[i];
-      ctx.fillStyle = colour(C.ink); ctx.fillRect(b.x - 2, b.y - 2, b.w + 4, b.h + 4);
-      drawCard(card, "md", b.x, b.y, now);
-      if (i === state.focus) outline(b, C.hover);
-    });
-    const card = state.spread[state.focus];
-    if (!card) return;
-    text(`${state.focus + 1}/${state.spread.length} ${card.position || ""}`, W / 2, 4, C.label, { align: "center" });
-    const name = card.face && now >= card.faceAt ? `${card.face.name}${card.face.reversed ? ", reversed" : ""}` : "Not turned yet";
-    text(name, W / 2, 13, C.speech, { align: "center" });
-  }
-
   function drawControls() {
     const items = room.controlItems;
     items.forEach((item, i) => {
-      const label = item.id === "talk" ? state.controls.talk : item.id === "inspect" ? (state.inspecting ? "Back to Vex" : "Inspect your cards") : state.controls.leave;
+      // The middle slot (Codex's "inspect" rect) is the type box.
+      const typeSlot = i === 1;
+      const label = typeSlot ? typedLabel(item.rect) : item.id === "talk" ? state.controls.talk : state.controls.leave;
       if (!label) return;
-      const enabled = item.id === "inspect" ? state.controls.inspect : item.id === "talk" ? state.controls.talkOn : true;
-      const index = !enabled ? C.dim : state.hover === item.id ? C.hover : C.label;
+      const enabled = typeSlot ? state.typing.enabled : item.id === "talk" ? state.controls.talkOn : true;
+      const index = !enabled ? C.dim : typeSlot && state.typing.value ? C.hover : state.hover === item.id ? C.hover : C.label;
       text(label, item.rect.x + item.rect.width / 2, item.rect.y + 4, index, { align: "center" });
       if (i > 0) { const prev = items[i - 1].rect; ctx.fillStyle = colour(C.dim); ctx.fillRect(Math.round((prev.x + prev.width + item.rect.x) / 2), item.rect.y + 3, 1, 9); }
     });
@@ -267,8 +250,7 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     drawReveal(now);
     if (state.label) text(state.label.slice(0, 52), W / 2, Math.min(room.rects.table.y + room.rects.table.height, room.rects.controls.y - 9), C.gold, { align: "center" });
     if (state.dimmed) stipple(0, 0, W, room.rects.controls.y);
-    if (state.inspecting) drawInspect(now);
-    else if (!state.dimmed) drawSpeech(now);
+    if (!state.dimmed) drawSpeech(now);
     drawControls();
     ctx.fillStyle = colour(C.ink); ctx.fillRect(0, ROOM_H, W, H - ROOM_H);
     const strip = state.status || state.footnote;
@@ -282,7 +264,7 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
       say(line);
       state.idleNext = state.speechUntil + 1200;
     }
-    speechLines(now).forEach((line, i) => text(line, speechRect.x + speechRect.width / 2, speechRect.y + room.speech.padding + i * 9, C.speech, { align: "center" }));
+    speechLines(now).forEach((line, i) => text(line, speechRect.x + speechRect.width / 2, speechRect.y + room.speech.padding + i * 9, state.speechColour, { align: "center" }));
   }
 
   // Held text longer than three lines is shown a page at a time, LucasArts style.
@@ -295,7 +277,9 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
   }
 
   // Public API --------------------------------------------------------------
-  function say(str, { mime = false, persistent = false } = {}) {
+  // guest: true shows the guest's typed line in the controls colour until Vex answers.
+  function say(str, { mime = false, persistent = false, guest = false } = {}) {
+    state.speechColour = guest ? C.label : C.speech;
     const now = performance.now();
     // A held line (the verdict, an error) is shown whole; live speech shows the current phrase.
     state.speech = !str ? [] : persistent ? wrap(str, maxChars) : currentPhrase(str, maxChars, 3);
@@ -315,30 +299,26 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
       const r = sheet.reactions[name];
       if (r) state.reaction = { name, until: performance.now() + r.holdMs, rest: r.restMouth || null };
     },
-    deal(positions) { state.spread = positions.map((position) => ({ position, face: null, faceAt: 0 })); state.lit = -1; state.focus = 0; },
+    deal(positions) { state.spread = positions.map((position) => ({ position, face: null, faceAt: 0 })); state.lit = -1; },
     turn(i, card) {
       const slot = state.spread[i];
       if (!slot) return;
       const now = performance.now(), box = slots()[i], deal = sheet.animations.deal.durationsMs;
       const faceAt = now + deal[0] + deal[1];
       slot.face = card; slot.faceAt = faceAt;
-      state.lit = i; state.focus = i;
+      state.lit = i;
       state.hand = { start: now, x: box.x + Math.floor(box.w / 2), y: box.y + Math.floor(box.h / 2) };
       const [w] = CARD.lg, right = sprite.x + sprite.width / 2 <= W / 2;
       state.reveal = { card, start: faceAt, until: faceAt + 3600, x: right ? sprite.x + sprite.width + 14 : sprite.x - 14 - w, y: 34 };
       this.react(card.reversed ? "unimpressed" : "dramatic");
     },
-    clearCards() { state.spread = []; state.lit = -1; state.hand = null; state.reveal = null; state.inspecting = false; },
+    clearCards() { state.spread = []; state.lit = -1; state.hand = null; state.reveal = null; },
     label(str) { state.label = str || ""; },
     status(str) { state.status = str || ""; },
     footnote(str) { state.footnote = str || ""; },
-    controls(next) { Object.assign(state.controls, next); if (!state.controls.inspect) state.inspecting = false; },
+    controls(next) { Object.assign(state.controls, next); },
+    typing(next) { Object.assign(state.typing, next); },
     hover(id) { state.hover = id; },
-    get inspecting() { return state.inspecting; },
-    inspect(open = !state.inspecting) { state.inspecting = open && state.spread.length > 0; },
-    focusCard(delta) { if (state.spread.length) state.focus = (state.focus + delta + state.spread.length) % state.spread.length; },
-    cardAt(x, y) { return state.inspecting ? inspectLayout().findIndex((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) : -1; },
-    pick(i) { if (i >= 0) state.focus = i; },
     dim(on) { state.dimmed = on; },
   };
   const loop = (now) => { draw(now); requestAnimationFrame(loop); };

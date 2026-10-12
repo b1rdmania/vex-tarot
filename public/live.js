@@ -5,7 +5,9 @@ import { createScene } from "./retro.js";
 const $ = (id) => document.getElementById(id);
 const stage = $("stage"), frame = $("frame"), canvas = $("scene"), table = $("table");
 const subs = $("subs"), question = $("question"), debug = $("debug"), notice = $("notice");
-const buttons = { talk: $("talk"), inspect: $("inspect"), leave: $("leave") };
+const buttons = { talk: $("talk"), leave: $("leave") };
+const typeBox = $("type");
+const TYPING_PING_MS = 5_000;
 const RESET_AFTER_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 35_000;
 const FOOTNOTE = "An AI in a mirror. For entertainment.";
@@ -20,14 +22,15 @@ let ready = false, crisis = false, verdict = "";
 let stopDemo = null;
 
 const scene = await createScene(canvas, params.get("room") || undefined);
-for (const item of scene.room.controlItems) {
-  const el = buttons[item.id];
-  if (!el) continue;
+scene.room.controlItems.forEach((item, i) => {
+  // The middle slot is the type box.
+  const el = i === 1 ? typeBox : buttons[item.id];
+  if (!el) return;
   for (const [k, v] of Object.entries({ x: item.rect.x, y: item.rect.y, w: item.rect.width, h: item.rect.height })) el.style.setProperty(`--${k}`, v);
   const on = () => scene.hover(item.id), off = () => scene.hover(null);
   el.addEventListener("pointerenter", on); el.addEventListener("focus", on);
   el.addEventListener("pointerleave", off); el.addEventListener("blur", off);
-}
+});
 // Fill the screen. Above x4 the slight unevenness of a fractional scale is invisible.
 function fit() {
   const room = Math.min(innerWidth / 320, innerHeight / 212);
@@ -48,14 +51,14 @@ function log(...args) {
 function status(text) { $("status-text").textContent = text; scene.status(text); }
 function phase(name) { stage.dataset.phase = name; }
 // One place sets the three controls, for both the canvas and the real buttons.
-function controls({ talk = null, talkOn = true, inspect = false, leave = null }) {
+function controls({ talk = null, talkOn = true, type = false, leave = null }) {
   buttons.talk.hidden = !talk; buttons.talk.textContent = talk || ""; buttons.talk.disabled = !talkOn;
-  buttons.inspect.disabled = !inspect;
   buttons.leave.hidden = !leave; buttons.leave.textContent = leave || "";
-  scene.controls({ talk, talkOn, inspect, leave });
-  syncInspect();
+  typeBox.disabled = !type;
+  if (!type) { typeBox.value = ""; typeBox.blur(); }
+  scene.controls({ talk, talkOn, leave });
+  scene.typing({ enabled: type, value: typeBox.value });
 }
-function syncInspect() { buttons.inspect.textContent = scene.inspecting ? "Back to Vex" : "Inspect your cards"; }
 function schedule(run, callback, delay) {
   const timer = setTimeout(() => { run.timers.delete(timer); if (current === run) callback(); }, delay);
   run.timers.add(timer);
@@ -68,18 +71,36 @@ addEventListener("keydown", (event) => {
   if (event.code === "Space" && !event.repeat && !interactive && stage.dataset.state === "idle") { event.preventDefault(); fullscreen(true); start(); }
   if (event.key === "d" && !interactive) debug.hidden = !debug.hidden;
   if (event.key === "f" && !interactive) fullscreen();
-  if (scene.inspecting && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); scene.focusCard(event.key === "ArrowLeft" ? -1 : 1); }
   if (event.key === "Escape") {
-    if (scene.inspecting) { scene.inspect(false); syncInspect(); }
+    if (event.target === typeBox && typeBox.value) { typeBox.value = ""; scene.typing({ value: "" }); }
     else if (current && !current.closing) finish(current, "cancelled");
   }
 });
 buttons.talk.addEventListener("click", () => { fullscreen(true); if (stage.dataset.state !== "idle") reset(); start(); });
-buttons.inspect.addEventListener("click", () => { scene.inspect(); syncInspect(); });
+
 buttons.leave.addEventListener("click", () => { if (current && !current.closing) finish(current, "cancelled"); else reset(); });
-canvas.addEventListener("click", (event) => {
-  const box = canvas.getBoundingClientRect();
-  scene.pick(scene.cardAt((event.clientX - box.left) * 320 / box.width, (event.clientY - box.top) * 212 / box.height));
+canvas.addEventListener("click", () => { if (!typeBox.disabled) typeBox.focus(); });
+
+// Typing: for noisy rooms or guests without a microphone. The agent screens it like speech.
+typeBox.addEventListener("focus", () => scene.typing({ focused: true }));
+typeBox.addEventListener("blur", () => scene.typing({ focused: false }));
+typeBox.addEventListener("input", () => {
+  scene.typing({ value: typeBox.value });
+  const run = current;
+  if (!run?.room || run.closing || performance.now() - (run.typedAt || -Infinity) < TYPING_PING_MS) return;
+  run.typedAt = performance.now();
+  Promise.resolve(run.room.localParticipant.publishData(new TextEncoder().encode('{"type":"typing"}'), { reliable: true, topic: "vex-guest" })).catch(() => {});
+});
+typeBox.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.isComposing) return;
+  event.preventDefault();
+  const text = typeBox.value.trim(), run = current;
+  if (!text || !run?.room || run.closing || crisis) return;
+  typeBox.value = "";
+  scene.typing({ value: "" });
+  scene.say(text, { guest: true });
+  Promise.resolve(run.room.localParticipant.sendText(text, { topic: "lk.chat" })).catch(() => log("typed message failed"));
+  log("typed", text.length, "chars");
 });
 
 function release(run) {
@@ -137,7 +158,7 @@ async function start() {
   phase("connecting");
   scene.idle(false); scene.footnote("");
   scene.say("One moment, mortal.", { mime: true });
-  controls({ talk: "Talk to Vex", talkOn: false, leave: "Leave" });
+  controls({ talk: "Talk to Vex", talkOn: false, type: true, leave: "Leave" });
   $("intro").textContent = "Allow your microphone when asked. Sit close and speak normally.";
   status("Allow your microphone. Connecting...");
   run.watchdog = schedule(run, () => fail(run, "Vex hasn’t answered. Check your connection and try again."), CONNECT_TIMEOUT_MS);
@@ -158,6 +179,14 @@ async function start() {
     if (!run.heardAgent) status("Microphone ready. Waiting for Vex...");
   } catch (err) {
     if (current !== run || run.closing) return;
+    // No microphone: carry on as a typed reading rather than failing.
+    if ((err.name === "NotAllowedError" || err.name === "NotFoundError") && run.room) {
+      run.micReady = true;
+      log("no microphone, typing only");
+      status("No microphone. Type to Vex below.");
+      typeBox.focus();
+      return;
+    }
     log("start failed", err.name || "Error");
     const message = err.name === "NotAllowedError" ? "Microphone access was denied. Allow it in your browser, then try again." : err.name === "NotFoundError" ? "No microphone was found. Connect one, then try again." : err.message;
     fail(run, message || "We couldn’t connect. Please try again.");
@@ -257,7 +286,7 @@ function finish(run, reason) {
   $("afterword").hidden = !verdict;
   scene.say(verdict || closing, { persistent: true });
   scene.react("smirk");
-  controls({ talk: "Talk to Vex", inspect: !!spread, leave: "Next guest" });
+  controls({ talk: "Talk to Vex", leave: "Next guest" });
   status(spread ? "Your cards stay for 30 seconds. Take a photo." : "Ready for the next guest.");
   schedule(run, reset, RESET_AFTER_MS);
 }
@@ -282,7 +311,7 @@ function deal(run, name, q) {
   });
   scene.deal(positions);
   scene.label(q ? `"${q}"` : "The cards are on the table.");
-  controls({ talk: "Talk to Vex", talkOn: false, inspect: true, leave: "Leave" });
+  controls({ talk: "Talk to Vex", talkOn: false, type: true, leave: "Leave" });
   log("deal", name);
 }
 function turn(i, card) {

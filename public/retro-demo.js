@@ -15,7 +15,7 @@ const SCRIPT = [
   [4500, (s, ui) => { ui.status("Your turn. Speak normally."); s.say(""); }],
   [3000, (s, ui) => { ui.status("Vex is considering you..."); s.react("eye_roll"); }],
   [1500, (s, ui) => { ui.status("Vex is speaking. You can interrupt."); s.say("Whether to text them. Of course it is. The cards are on the table.", { mime: true }); }],
-  [3500, (s, ui) => { s.deal(POSITIONS); s.label("The cards are on the table."); ui.controls({ talk: "Talk to Vex", talkOn: false, inspect: true, leave: "Leave" }); }],
+  [3500, (s, ui) => { s.deal(POSITIONS); s.label("The cards are on the table."); ui.controls({ talk: "Talk to Vex", talkOn: false, leave: "Leave" }); }],
   ...CARDS.flatMap((card, i) => [[1500, (s) => {
     s.say(card.line, { mime: true });
     s.turn(i, card);
@@ -24,7 +24,7 @@ const SCRIPT = [
   [800, (s, ui) => {
     s.say("Don't text them. Text me. Next.", { mime: true, persistent: true });
     s.react("smirk");
-    ui.controls({ talk: "Talk to Vex", inspect: true, leave: "Next guest" });
+    ui.controls({ talk: "Talk to Vex", leave: "Next guest" });
     ui.status("Your cards stay for 30 seconds. Take a photo.");
   }],
 ];

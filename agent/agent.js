@@ -17,6 +17,8 @@ import { CRISIS_LINE, CRISIS_PATTERN, GREETING, INSTRUCTIONS, SPREADS, WRAP_UP }
 const DECK = JSON.parse(readFileSync(new URL("../src/deck.json", import.meta.url), "utf8"));
 const SANDBOX_AVATAR = "dd73ea75-1218-4ef3-92ce-606d5f7fbc0a"; // "Wayne", the only sandbox avatar
 const env = (k, d) => process.env[k] || d;
+const TYPING_GRACE_MS = 45_000;
+const MAX_TYPED_CHARS = 500;
 const MIN_GUEST_TURNS = Number(env("VEX_MIN_GUEST_TURNS", "4"));
 const MAX_SESSION_MS = Number(env("VEX_MAX_SESSION_S", "480")) * 1000;
 
@@ -143,13 +145,18 @@ export default defineAgent({
   entry: async (ctx) => {
     const logger = log();
     await ctx.connect();
-    const state = { cards: draw(SPREADS.celtic.length), spread: null, spoken: 0, guestTurns: 0, hurry: false, ending: false, crisis: false, closing: false, phase: "opening", ready: false, reason: "complete", verdict: "" };
+    const state = { lastTyped: 0, cards: draw(SPREADS.celtic.length), spread: null, spoken: 0, guestTurns: 0, hurry: false, ending: false, crisis: false, closing: false, phase: "opening", ready: false, reason: "complete", verdict: "" };
     const encoder = new TextEncoder();
     const send = (msg) =>
       ctx.room.localParticipant
         ?.publishData(encoder.encode(JSON.stringify(msg)), { reliable: true, topic: "vex" })
         .catch((err) => logger.warn({ err: String(err) }, "publishData failed"));
 
+    // The kiosk sends "typing" while the guest types, so a slow typist isn't marked away.
+    ctx.room.on("dataReceived", (payload, _participant, _kind, topic) => {
+      if (topic !== "vex-guest") return;
+      try { if (JSON.parse(new TextDecoder().decode(payload)).type === "typing") state.lastTyped = Date.now(); } catch {}
+    });
     const session = new voice.AgentSession({
       vad: ctx.proc.userData.vad,
       stt: new deepgram.STT({ model: "nova-3", language: "en-GB", keyterm: ["tarot", "Vex", "Celtic Cross"] }),
@@ -178,7 +185,8 @@ export default defineAgent({
     });
     session.on(AgentSessionEventTypes.AgentStateChanged, (ev) => send({ type: "state", state: ev.newState }));
     session.on(AgentSessionEventTypes.UserStateChanged, (ev) => {
-      if (ev.newState === "away" && !state.ending) {
+      // A guest who is typing is silent but present.
+      if (ev.newState === "away" && !state.ending && Date.now() - state.lastTyped > TYPING_GRACE_MS) {
         state.ending = true;
         state.reason = "away";
         session.say("Gone, then. The cards will remember.", { allowInterruptions: false });
@@ -281,7 +289,22 @@ export default defineAgent({
     await session.start({
       agent: new Vex(state, send),
       room: ctx.room,
-      inputOptions: { closeOnDisconnect: true, deleteRoomOnClose: true },
+      inputOptions: {
+        closeOnDisconnect: true,
+        deleteRoomOnClose: true,
+        // Typed messages (lk.chat, for noisy rooms or no microphone) get the same crisis screen as speech.
+        textInputCallback: (sess, ev) => {
+          state.lastTyped = Date.now();
+          if (state.crisis || state.closing) return;
+          if (CRISIS_PATTERN.test(ev.text)) {
+            logger.warn("crisis screen matched");
+            stopForCrisis(sess, state, send);
+            return;
+          }
+          sess.interrupt();
+          sess.generateReply({ userInput: ev.text.slice(0, MAX_TYPED_CHARS) });
+        },
+      },
       record: false,
     });
 

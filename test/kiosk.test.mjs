@@ -53,20 +53,20 @@ async function shot(page, name) {
   await mkdir(process.env.VEX_SHOTS, { recursive: true });
   await page.screenshot({ path: resolve(process.env.VEX_SHOTS, name + ".png"), fullPage: true, animations: "disabled" });
 }
-test("denied microphone disconnects, displays a visible error, and can retry", async t => {
+test("denied microphone carries on as a typed reading", async t => {
   const page = await pageFor(t, { denied: true });
   await start(page);
-  await page.getByRole("button", { name: "Try again" }).waitFor();
-  assert.match(await page.locator("#intro").innerText(), /Microphone access was denied/);
-  assert.equal(await page.evaluate(() => window.__vexMock.disconnects), 1);
-  await page.evaluate(() => { window.__micDenied = false; });
-  await page.getByRole("button", { name: "Try again" }).click();
-  await page.waitForFunction(() => window.__vexMock.rooms.length === 2);
+  await page.waitForFunction(() => /Type to Vex/.test(document.querySelector("#status-text").textContent));
+  assert.equal(await page.evaluate(() => window.__vexMock.disconnects), 0);
   await ready(page);
   assert.equal(await page.locator("#stage").getAttribute("data-phase"), "conversation");
-  // Events from the discarded room cannot reset or end this guest's session.
-  await page.evaluate(() => window.__vexMock.rooms[0].event({ type: "end" }));
-  assert.equal(await page.locator("#stage").getAttribute("data-phase"), "conversation");
+  assert.equal(await page.evaluate(() => document.activeElement.id), "type", "type box is focused");
+  await page.keyboard.type("Will I get the flat?");
+  await page.keyboard.press("Enter");
+  assert.deepEqual(await page.evaluate(() => window.__vexMock.sent), [{ text: "Will I get the flat?", topic: "lk.chat" }]);
+  assert.equal(await page.locator("#type").inputValue(), "");
+  // Events from a discarded room cannot reset or end this guest's session.
+  await page.evaluate(() => window.__vexMock.rooms[0].event({ type: "deal", spread: "short" }));
 });
 test("bad access code gives a visible recovery message", async t => {
   const page = await pageFor(t, { status: 401 });
@@ -164,18 +164,19 @@ test("Celtic announcement chooses ten cards without a tool event", async t => {
   await say(page, "The Celtic Cross is on the table.");
   assert.equal(await page.locator(".slot").count(), 10);
 });
-test("inspect opens over the room and Escape closes it without ending the reading", async t => {
+test("typing sends lk.chat, pings typing, and is disabled outside a session", async t => {
   const page = await pageFor(t);
-  assert.equal(await page.getByRole("button", { name: "Inspect your cards" }).isDisabled(), true);
+  assert.equal(await page.locator("#type").isDisabled(), true);
   await start(page); await ready(page);
-  await event(page, { type: "deal", spread: "short" });
-  await say(page, `${cards[0].name}, upright. Take a chance.`);
-  await page.getByRole("button", { name: "Inspect your cards" }).click();
-  await page.getByRole("button", { name: "Back to Vex" }).waitFor();
-  await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Inspect your cards" }).waitFor();
-  assert.equal(await page.locator("#stage").getAttribute("data-phase"), "reading");
-  assert.equal(await page.evaluate(() => window.__vexMock.disconnects), 0);
+  await page.locator("#type").fill("");
+  await page.locator("#type").pressSequentially("hello");
+  await page.locator("#type").press("Enter");
+  assert.deepEqual(await page.evaluate(() => window.__vexMock.sent), [{ text: "hello", topic: "lk.chat" }]);
+  assert.deepEqual(await page.evaluate(() => window.__vexMock.data[0]), { text: '{"type":"typing"}', topic: "vex-guest" });
+  await page.locator("#type").press("Enter");
+  assert.equal(await page.evaluate(() => window.__vexMock.sent.length), 1, "empty lines are not sent");
+  await event(page, { type: "crisis", text: "Please find your host." });
+  assert.equal(await page.locator("#type").isDisabled(), true);
 });
 test("starting a real session stops the scripted demo", async t => {
   const page = await pageFor(t, { query: "/?demo" });
@@ -184,5 +185,4 @@ test("starting a real session stops the scripted demo", async t => {
   await page.clock.runFor(70_000);
   assert.equal(await page.getByRole("button", { name: "Leave" }).isVisible(), true, "demo did not swap in its own controls");
   assert.equal(await page.getByRole("button", { name: "Next guest" }).count(), 0);
-  assert.equal(await page.getByRole("button", { name: "Inspect your cards" }).isDisabled(), true, "no demo cards");
 });
