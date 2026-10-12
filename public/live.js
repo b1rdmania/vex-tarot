@@ -156,7 +156,6 @@ async function start() {
   current = run;
   stage.dataset.state = "session";
   phase("connecting");
-  scene.say("One moment, mortal.", { mime: true });
   controls({ type: true, leave: "Leave" });
   $("intro").textContent = "Allow your microphone when asked. Sit close and speak normally.";
   status("Allow your microphone. Connecting...");
