@@ -1,0 +1,20 @@
+{
+  "speaker": "Vex",
+  "lines": [
+    "Love? How inconvenient.",
+    "Work? My condolences.",
+    "Money? A haunting, then.",
+    "Go on. Blame your ex.",
+    "Ask. I'm already judging.",
+    "Your choices. Where to begin?"
+  ],
+  "rendering": {
+    "case": "uppercase in the supplied bitmap mockups; retain original case for speech",
+    "glyphWidth": 5,
+    "advance": 6,
+    "glyphHeight": 7,
+    "maxLineWidth": 192,
+    "colorIndex": 7,
+    "shadowIndex": 0
+  }
+}
