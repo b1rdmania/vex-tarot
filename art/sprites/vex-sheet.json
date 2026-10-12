@@ -1,0 +1,238 @@
+{
+  "version": 1,
+  "status": "rough",
+  "image": "vex-sheet.png",
+  "palette": "../palette.json",
+  "frameSize": {
+    "width": 64,
+    "height": 76
+  },
+  "sheet": {
+    "width": 256,
+    "height": 380,
+    "columns": 4,
+    "rows": 5
+  },
+  "origin": {
+    "x": 0,
+    "y": 0
+  },
+  "mouthAnchor": {
+    "x": 32,
+    "y": 40
+  },
+  "frames": {
+    "body/idle": {
+      "x": 0,
+      "y": 0,
+      "width": 64,
+      "height": 76,
+      "layer": "body"
+    },
+    "body/breathe_in": {
+      "x": 64,
+      "y": 0,
+      "width": 64,
+      "height": 76,
+      "layer": "body"
+    },
+    "body/blink_half": {
+      "x": 128,
+      "y": 0,
+      "width": 64,
+      "height": 76,
+      "layer": "body"
+    },
+    "body/blink": {
+      "x": 192,
+      "y": 0,
+      "width": 64,
+      "height": 76,
+      "layer": "body"
+    },
+    "body/eye_roll": {
+      "x": 0,
+      "y": 76,
+      "width": 64,
+      "height": 76,
+      "layer": "body"
+    },
+    "body/smirk": {
+      "x": 64,
+      "y": 76,
+      "width": 64,
+      "height": 76,
+      "layer": "body"
+    },
+    "body/dramatic": {
+      "x": 128,
+      "y": 76,
+      "width": 64,
+      "height": 76,
+      "layer": "body"
+    },
+    "body/unimpressed": {
+      "x": 192,
+      "y": 76,
+      "width": 64,
+      "height": 76,
+      "layer": "body"
+    },
+    "mouth/closed": {
+      "x": 0,
+      "y": 152,
+      "width": 64,
+      "height": 76,
+      "layer": "mouth"
+    },
+    "mouth/slightly_open": {
+      "x": 64,
+      "y": 152,
+      "width": 64,
+      "height": 76,
+      "layer": "mouth"
+    },
+    "mouth/open": {
+      "x": 128,
+      "y": 152,
+      "width": 64,
+      "height": 76,
+      "layer": "mouth"
+    },
+    "mouth/wide": {
+      "x": 192,
+      "y": 152,
+      "width": 64,
+      "height": 76,
+      "layer": "mouth"
+    },
+    "mouth/smirk": {
+      "x": 0,
+      "y": 228,
+      "width": 64,
+      "height": 76,
+      "layer": "mouth"
+    },
+    "hand/rest": {
+      "x": 0,
+      "y": 304,
+      "width": 64,
+      "height": 76,
+      "layer": "hand"
+    },
+    "hand/reach": {
+      "x": 64,
+      "y": 304,
+      "width": 64,
+      "height": 76,
+      "layer": "hand"
+    },
+    "hand/turn": {
+      "x": 128,
+      "y": 304,
+      "width": 64,
+      "height": 76,
+      "layer": "hand"
+    },
+    "hand/settle": {
+      "x": 192,
+      "y": 304,
+      "width": 64,
+      "height": 76,
+      "layer": "hand"
+    }
+  },
+  "animations": {
+    "idle": {
+      "frames": [
+        "body/idle",
+        "body/breathe_in",
+        "body/idle"
+      ],
+      "durationsMs": [
+        1800,
+        600,
+        1800
+      ],
+      "loop": true
+    },
+    "blink": {
+      "frames": [
+        "body/blink_half",
+        "body/blink",
+        "body/blink_half"
+      ],
+      "durationsMs": [
+        50,
+        90,
+        50
+      ],
+      "loop": false
+    },
+    "deal": {
+      "frames": [
+        "hand/rest",
+        "hand/reach",
+        "hand/turn",
+        "hand/settle",
+        "hand/rest"
+      ],
+      "durationsMs": [
+        100,
+        120,
+        140,
+        120,
+        100
+      ],
+      "loop": false
+    }
+  },
+  "reactions": {
+    "eye_roll": {
+      "frame": "body/eye_roll",
+      "holdMs": 800
+    },
+    "smirk": {
+      "frame": "body/smirk",
+      "restMouth": "mouth/smirk",
+      "holdMs": 1000
+    },
+    "dramatic": {
+      "frame": "body/dramatic",
+      "holdMs": 700
+    },
+    "unimpressed": {
+      "frame": "body/unimpressed",
+      "holdMs": 1200
+    }
+  },
+  "mouth": {
+    "frames": [
+      "mouth/closed",
+      "mouth/slightly_open",
+      "mouth/open",
+      "mouth/wide"
+    ],
+    "neutral": "mouth/closed",
+    "layerOrder": [
+      "body",
+      "mouth"
+    ],
+    "drawOffset": {
+      "x": 0,
+      "y": 0
+    },
+    "notes": "Every mouth cell is 64x76 with transparent padding. Draw at exactly the body origin, not at mouthAnchor. Choose frame from smoothed voice amplitude. Mouth frames work on every body expression."
+  },
+  "hand": {
+    "drawOffset": {
+      "x": 0,
+      "y": 0
+    },
+    "contactPoint": {
+      "x": 29,
+      "y": 54
+    },
+    "notes": "Optional independent table overlay. Place the 64x76 cell so contactPoint aligns with the card edge. hand/rest is intentionally fully transparent."
+  }
+}
