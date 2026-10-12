@@ -29,7 +29,9 @@ const SCRIPT = [
   }],
 ];
 
+// Returns a stop function; live.js calls it when a real session starts.
 export function demo(scene, ui) {
   let t = 0;
-  for (const [wait, step] of SCRIPT) { t += wait; setTimeout(() => step(scene, ui), t); }
+  const timers = SCRIPT.map(([wait, step]) => { t += wait; return setTimeout(() => step(scene, ui), t); });
+  return () => timers.forEach(clearTimeout);
 }

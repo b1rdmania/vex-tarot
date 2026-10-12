@@ -38,7 +38,7 @@ async function pageFor(t, options = {}) {
   await page.route("**/api/token", route => route.fulfill({ status: options.status || 200, json: { url: "mock", token: "mock" } }));
   await page.route("https://fonts.googleapis.com/**", route => route.abort());
   if (options.denied) await page.addInitScript(() => { window.__micDenied = true; });
-  await page.goto(base);
+  await page.goto(base + (options.query || ""));
   return page;
 }
 const event = (page, msg) => page.evaluate(msg => window.__vexMock.event(msg), msg);
@@ -176,4 +176,13 @@ test("inspect opens over the room and Escape closes it without ending the readin
   await page.getByRole("button", { name: "Inspect your cards" }).waitFor();
   assert.equal(await page.locator("#stage").getAttribute("data-phase"), "reading");
   assert.equal(await page.evaluate(() => window.__vexMock.disconnects), 0);
+});
+test("starting a real session stops the scripted demo", async t => {
+  const page = await pageFor(t, { query: "/?demo" });
+  await page.waitForFunction(() => document.querySelector("#talk"));
+  await start(page); await ready(page);
+  await page.clock.runFor(70_000);
+  assert.equal(await page.getByRole("button", { name: "Leave" }).isVisible(), true, "demo did not swap in its own controls");
+  assert.equal(await page.getByRole("button", { name: "Next guest" }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Inspect your cards" }).isDisabled(), true, "no demo cards");
 });

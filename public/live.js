@@ -17,6 +17,7 @@ let current = null;
 let started = 0;
 let deck = null, spread = null, positions = null, flipped = 0;
 let ready = false, crisis = false, verdict = "";
+let stopDemo = null;
 
 const scene = await createScene(canvas, params.get("room") || undefined);
 for (const item of scene.room.controlItems) {
@@ -127,6 +128,7 @@ function fail(run, message) {
 }
 async function start() {
   if (stage.dataset.state !== "idle") return;
+  stopDemo?.(); stopDemo = null;
   reset();
   started = performance.now();
   const run = { room: null, abort: new AbortController(), timers: new Set(), audio: new Set(), closing: false, heardAgent: false };
@@ -317,4 +319,4 @@ function animateMouth(run, mediaTrack) {
 }
 
 reset();
-if (params.has("demo")) import("./retro-demo.js").then((m) => m.demo(scene, { controls, status }));
+if (params.has("demo")) import("./retro-demo.js").then((m) => { stopDemo = m.demo(scene, { controls, status }); });

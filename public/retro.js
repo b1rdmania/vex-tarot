@@ -116,7 +116,7 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
 
   const state = {
     voice: 0, mouth: 0, mouthAt: 0,
-    speech: [], speechUntil: 0, mime: 0, persistent: false,
+    speech: [], speechUntil: 0, speechAt: 0, mime: 0, persistent: false,
     idleLines: false, idleIndex: 0, idleNext: 0,
     reaction: null, blinkAt: 0, blinkStart: -1,
     spread: [], lit: -1, hand: null, reveal: null,
@@ -267,14 +267,24 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
       say(line);
       state.idleNext = state.speechUntil + 1200;
     }
-    state.speech.forEach((line, i) => text(line, speechRect.x + speechRect.width / 2, speechRect.y + room.speech.padding + i * 9, C.speech, { align: "center" }));
+    speechLines(now).forEach((line, i) => text(line, speechRect.x + speechRect.width / 2, speechRect.y + room.speech.padding + i * 9, C.speech, { align: "center" }));
+  }
+
+  // Held text longer than three lines is shown a page at a time, LucasArts style.
+  const PAGE_LINES = 3, PAGE_MS = 4500;
+  function speechLines(now) {
+    if (state.speech.length <= PAGE_LINES) return state.speech;
+    const pages = Math.ceil(state.speech.length / PAGE_LINES);
+    const page = Math.floor((now - state.speechAt) / PAGE_MS) % pages;
+    return state.speech.slice(page * PAGE_LINES, page * PAGE_LINES + PAGE_LINES);
   }
 
   // Public API --------------------------------------------------------------
   function say(str, { mime = false, persistent = false } = {}) {
     const now = performance.now();
     // A held line (the verdict, an error) is shown whole; live speech shows the current phrase.
-    state.speech = !str ? [] : persistent ? wrap(str, maxChars).slice(0, 4) : currentPhrase(str, maxChars, 3);
+    state.speech = !str ? [] : persistent ? wrap(str, maxChars) : currentPhrase(str, maxChars, 3);
+    state.speechAt = now;
     const chars = state.speech.join(" ").length;
     state.speechUntil = now + 1800 + chars * 45;
     state.persistent = persistent && !!str;
