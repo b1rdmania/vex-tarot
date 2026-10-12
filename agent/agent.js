@@ -17,6 +17,7 @@ import { CRISIS_LINE, CRISIS_PATTERN, GREETING, INSTRUCTIONS, SPREADS, WRAP_UP }
 const DECK = JSON.parse(readFileSync(new URL("../src/deck.json", import.meta.url), "utf8"));
 const SANDBOX_AVATAR = "dd73ea75-1218-4ef3-92ce-606d5f7fbc0a"; // "Wayne", the only sandbox avatar
 const env = (k, d) => process.env[k] || d;
+const MIN_GUEST_TURNS = Number(env("VEX_MIN_GUEST_TURNS", "4"));
 const MAX_SESSION_MS = Number(env("VEX_MAX_SESSION_S", "480")) * 1000;
 
 // K3 reasons by default, which adds ~10 s a turn. The plugin has no field for
@@ -99,6 +100,10 @@ class Vex extends voice.Agent {
           },
           execute: async ({ spread, question }) => {
             if (state.spread) return "The cards are already dealt. Read them.";
+            // The opening is the show. Hold the cards until the guest has had a few turns.
+            if (state.guestTurns < MIN_GUEST_TURNS && !state.hurry) {
+              return "Too soon. The cards stay in the deck. Keep talking with them: roast them, dig into the question, and confirm it before you deal.";
+            }
             state.spread = SPREADS[spread] ? spread : "short";
             send({ type: "deal", spread: state.spread, question });
             return "The cards are on the table. Say one line, then read them in order.";
@@ -131,7 +136,7 @@ export default defineAgent({
   entry: async (ctx) => {
     const logger = log();
     await ctx.connect();
-    const state = { cards: draw(SPREADS.celtic.length), spread: null, spoken: 0, ending: false, crisis: false, closing: false };
+    const state = { cards: draw(SPREADS.celtic.length), spread: null, spoken: 0, guestTurns: 0, hurry: false, ending: false, crisis: false, closing: false };
     const encoder = new TextEncoder();
     const send = (msg) =>
       ctx.room.localParticipant
@@ -175,6 +180,10 @@ export default defineAgent({
       const item = ev.item;
       if (item?.type !== "message") return;
       logger.info({ role: item.role, text: item.textContent }, "turn");
+      if (item.role === "user") {
+        state.guestTurns++;
+        if (/just (read|deal|do) (the|my) cards|hurry|quick(ly)?|no time/i.test(item.textContent || "")) state.hurry = true;
+      }
       // Her last line has finished playing: close the room. The tool that set
       // `ending` runs while that line is still being spoken, so wait for the item.
       if (item.role !== "assistant" || state.closing) return;
