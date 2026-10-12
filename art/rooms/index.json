@@ -1,26 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
   "palette": "../palette.json",
   "candidates": [
     {
       "id": "01-velvet-alcove",
       "title": "Velvet Alcove",
       "layout": "01-velvet-alcove.json",
-      "background": "01-velvet-alcove.png",
+      "background": "01-velvet-alcove.background.png",
+      "still": "01-velvet-alcove.png",
       "mockup": "01-velvet-alcove.laptop.png"
     },
     {
       "id": "02-corner-booth",
       "title": "Corner Booth",
       "layout": "02-corner-booth.json",
-      "background": "02-corner-booth.png",
+      "background": "02-corner-booth.background.png",
+      "still": "02-corner-booth.png",
       "mockup": "02-corner-booth.laptop.png"
     },
     {
       "id": "03-attic-window",
       "title": "Attic Window",
       "layout": "03-attic-window.json",
-      "background": "03-attic-window.png",
+      "background": "03-attic-window.background.png",
+      "still": "03-attic-window.png",
       "mockup": "03-attic-window.laptop.png"
     }
   ]

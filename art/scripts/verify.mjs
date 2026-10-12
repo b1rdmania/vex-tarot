@@ -37,15 +37,17 @@ for(const candidate of json('rooms/index.json').candidates){
   }
   const values=Object.values(rects);
   for(let i=0;i<values.length;i++)for(let j=i+1;j<values.length;j++)assert.ok(!overlaps(values[i],values[j]),`${candidate.id}: overlapping layer rectangles`);
-  assert.deepEqual([rects.face.width,rects.face.height],[64,76]);
+  assert.deepEqual([rects.sprite.width,rects.sprite.height],[64,76]);
   assert.ok(contains(rects.table,layout.safeAreas.cards));
   for(const item of layout.controlItems)assert.ok(contains(rects.controls,item.rect));
   for(const line of dialogue.lines)assert.ok(line.length*6-1<=rects.speech.width-6,`${candidate.id}: idle line exceeds one row: ${line}`);
-  const native=readImage('rooms/'+candidate.background,320,200);
-  // The entire live-video opening is one known matte colour, including corners.
+  const native=readImage('rooms/'+candidate.still,320,200);
+  const plate=readImage('rooms/'+candidate.background,320,200);
+  assert.ok(!('face' in rects), 'old face rectangle must be absent');
+  // The entire sprite recess on the clean plate is one known matte colour, including corners.
   const matte=parseInt(palette.colors[0].slice(1),16);
-  for(let y=rects.face.y;y<rects.face.y+rects.face.height;y++)for(let x=rects.face.x;x<rects.face.x+rects.face.width;x++){
-    const p=(y*320+x)*3;assert.equal((native[p]<<16)|(native[p+1]<<8)|native[p+2],matte,'face aperture must be clear');
+  for(let y=rects.sprite.y;y<rects.sprite.y+rects.sprite.height;y++)for(let x=rects.sprite.x;x<rects.sprite.x+rects.sprite.width;x++){
+    const p=(y*320+x)*3;assert.equal((plate[p]<<16)|(plate[p+1]<<8)|plate[p+2],matte,'sprite plate must be clear');
   }
   const mock=readImage('rooms/'+candidate.mockup,1440,900);
   // Pixel-perfect ×4 blocks and solid letterboxing. UI overlays are native too.
@@ -68,4 +70,5 @@ for(const candidate of json('rooms/index.json').candidates){
     assert.ok(native[n]===mock[m]&&native[n+1]===mock[m+1]&&native[n+2]===mock[m+2],'unexpected mockup change outside UI');
   }
 }
-console.log(JSON.stringify({status:'PASS',paletteColors:32,rooms:3,idleLines:6,checks:['native dimensions','palette membership','rectangle bounds/non-overlap','64x76 clear face apertures','single-line dialogue fit','×4 integer scaling','letterbox margins','mockup overlay isolation'],images},null,2));
+execFileSync(process.execPath,[fileURLToPath(new URL('./verify-sprites.mjs',import.meta.url))],{stdio:['ignore',2,2]});
+console.log(JSON.stringify({status:'PASS',paletteColors:32,rooms:3,idleLines:6,checks:['native dimensions','palette membership','rectangle bounds/non-overlap','64x76 clear sprite plates','single-line dialogue fit','×4 integer scaling','letterbox margins','mockup overlay isolation'],images},null,2));

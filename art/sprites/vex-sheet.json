@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "status": "rough",
+  "status": "integration-candidate",
   "image": "vex-sheet.png",
   "palette": "../palette.json",
   "frameSize": {

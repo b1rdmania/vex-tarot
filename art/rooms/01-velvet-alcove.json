@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "01-velvet-alcove",
   "title": "Velvet Alcove",
   "description": "Frontal velvet nook. The mirror is central, with the dead bouquet and overdue invoice on the left. Warm candlelight is balanced on both sides.",
@@ -8,10 +8,11 @@
     "height": 200,
     "pixelAspectRatio": 1
   },
-  "background": "01-velvet-alcove.png",
+  "background": "01-velvet-alcove.background.png",
+  "still": "01-velvet-alcove.png",
   "palette": "../palette.json",
   "rects": {
-    "face": {
+    "sprite": {
       "x": 128,
       "y": 41,
       "width": 64,
@@ -44,11 +45,21 @@
       "height": 30
     }
   },
-  "face": {
-    "fit": "cover",
+  "sprite": {
+    "atlas": "../sprites/vex-sheet.json",
+    "defaultBody": "body/idle",
+    "defaultMouth": "mouth/closed",
+    "drawOffset": {
+      "x": 0,
+      "y": 0
+    },
     "backgroundColorIndex": 0,
     "frameIsBakedIntoBackground": true,
-    "notes": "64x76 inner opening. Crop and colour-match the live head and shoulders into this rectangle; no generated face is baked in."
+    "handOrigin": {
+      "x": 131,
+      "y": 97
+    },
+    "notes": "Draw body and mouth cells at rects.sprite origin. Use the clean background plate when redrawing to erase the previous mouth/body/hand. The still PNG already contains idle Vex; it is for static fallback or preview."
   },
   "speech": {
     "fontHeight": 7,
@@ -107,14 +118,17 @@
   "coordinates": "Top-left origin; width/height counts pixels; right and bottom edges are exclusive. All rects use native 320x200 coordinates.",
   "layerOrder": [
     "background",
-    "face-video-clipped-to-face",
+    "sprite-body",
+    "sprite-mouth",
     "cards-within-safeAreas.cards",
+    "sprite-hand-optional",
     "speech",
     "controls"
   ],
   "notes": [
-    "Background PNG contains no dialogue or control labels.",
+    "The clean background plate contains no character, dialogue or control labels.",
+    "The native still and laptop mockup contain the drawn idle character.",
     "Laptop mockup bakes in sample text for composition review only; controls there are not interactive.",
-    "Same face size in all three options for a fair moving-face comparison."
+    "The same registered 64x76 sprite is used in all three rooms. The agent supplies voice only."
   ]
 }
