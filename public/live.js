@@ -278,6 +278,8 @@ function finish(run, reason) {
   release(run);
   subs.textContent = "";
   delete stage.dataset.agent;
+  // A card name she said in a way the matcher missed must not stay face down.
+  if (spread && !crisis) for (; flipped < spread.length; flipped++) turn(flipped, spread[flipped]);
   if (crisis || reason === "crisis") { phase("crisis"); controls({ leave: "Next guest" }); status("Choose Next guest when you're ready."); return; }
   phase("verdict");
   $("reading-focus").hidden = true;
