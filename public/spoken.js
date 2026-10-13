@@ -21,10 +21,11 @@ export function advance(text, cards, next) {
   let at = 0;
   while (next < cards.length) {
     const card = cards[next];
-    // Require the full name, its announced orientation, and punctuation. Waiting
-    // for punctuation also prevents a partial transcription from flipping a card.
-    const orientation = card.reversed ? "reversed" : "upright";
-    const announcement = new RegExp(`${boundary}${escape(card.name)}\\s*[,.:—–-]\\s*${orientation}\\s*[.!:—–-]`, "ig");
+    // The card name, then "upright" or "reversed" close behind it. Vex says
+    // "The Queen of Cups" though the deck name has no "The", so "The" is optional
+    // on every card. Either orientation counts: the card shows the drawn one.
+    const name = escape(card.name.replace(/^the\s+/i, ""));
+    const announcement = new RegExp(`\\b(?:the\\s+)?${name}\\b[^.!?]{0,24}?\\b(?:upright|reversed)\\b`, "ig");
     announcement.lastIndex = at;
     const match = announcement.exec(text);
     if (!match) break;
