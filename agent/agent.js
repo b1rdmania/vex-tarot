@@ -10,6 +10,7 @@ import * as elevenlabs from "@livekit/agents-plugin-elevenlabs";
 import * as liveavatar from "@livekit/agents-plugin-liveavatar";
 import * as openai from "@livekit/agents-plugin-openai";
 import * as silero from "@livekit/agents-plugin-silero";
+import { BackgroundVoiceCancellation } from "@livekit/noise-cancellation-node";
 import OpenAI from "openai";
 import { advance, readingUnderway, lastSentence } from "../public/spoken.js";
 import { CRISIS_LINE, CRISIS_PATTERN, GREETING, INSTRUCTIONS, SPREADS, WRAP_UP } from "./persona.js";
@@ -293,6 +294,9 @@ export default defineAgent({
       inputOptions: {
         closeOnDisconnect: true,
         deleteRoomOnClose: true,
+        // 14 Oct: people chatting near the laptop were transcribed as guest turns, so Vex kept
+        // starting replies and being cut off. Keep only the voice nearest the mic (LiveKit Cloud).
+        noiseCancellation: BackgroundVoiceCancellation(),
         // Typed messages (lk.chat, for noisy rooms or no microphone) get the same crisis screen as speech.
         textInputCallback: (sess, ev) => {
           state.lastTyped = Date.now();
