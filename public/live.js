@@ -10,6 +10,8 @@ const typeBox = $("type");
 const TYPING_PING_MS = 5_000;
 const RESET_AFTER_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 35_000;
+// Longer than any real turn, tool calls included. Past this, the agent is gone or stuck.
+const THINKING_TIMEOUT_MS = 30_000;
 const params = new URLSearchParams(location.search);
 const store = { get(key) { try { return localStorage.getItem(key); } catch { return null; } }, set(key, value) { try { localStorage.setItem(key, value); } catch {} } };
 const accessCode = params.get("code") || store.get("vexCode") || "";
@@ -240,6 +242,12 @@ function wire(run) {
   });
   room.on(RoomEvent.Reconnecting, () => { if (active()) { status("Connection lost. Reconnecting..."); clearTimeout(run.reconnectTimer); run.timers.delete(run.reconnectTimer); run.reconnectTimer = schedule(run, () => fail(run, "The connection could not be restored. Please try again."), CONNECT_TIMEOUT_MS); } });
   room.on(RoomEvent.Reconnected, () => { if (active()) { clearTimeout(run.reconnectTimer); run.timers.delete(run.reconnectTimer); status("Connected again. Carry on."); } });
+  // The agent can die without the room closing (e.g. its process is killed). Don't wait on it.
+  room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+    if (!active() || !participant.isAgent) return;
+    if (verdict || crisis) finish(run, crisis ? "crisis" : "complete");
+    else fail(run, "Vex lost her connection. Please try again.");
+  });
   room.on(RoomEvent.Disconnected, () => {
     if (!active()) return;
     if (verdict || crisis) finish(run, crisis ? "crisis" : "complete");
@@ -251,6 +259,8 @@ function onEvent(run, msg) {
     if (["listening", "thinking", "speaking"].includes(msg.state)) agentArrived(run);
     if (msg.state === "thinking" && stage.dataset.agent !== "thinking" && Math.random() < 0.3) scene.react("eye_roll");
     stage.dataset.agent = msg.state;
+    clearTimeout(run.stallTimer); run.timers.delete(run.stallTimer);
+    if (msg.state === "thinking") run.stallTimer = schedule(run, () => fail(run, "Vex has gone quiet. Please try again."), THINKING_TIMEOUT_MS);
     if (!crisis) status(({ listening: "Your turn. Speak normally.", thinking: "Vex is considering you...", speaking: "Vex is speaking. You can interrupt." })[msg.state] || "Connecting...");
   }
   if (msg.type === "cards") { deck = msg; if (run.pendingDeal) { deal(run, run.pendingDeal.spread, run.pendingDeal.question); run.pendingDeal = null; } }

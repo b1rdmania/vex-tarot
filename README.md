@@ -131,6 +131,10 @@ Every API call spends money, so the API needs `ACCESS_CODE`. Share the link as `
 
 The agent worker runs on Fly as `vex-agent` (one machine in London, always on). Deploy with `fly deploy -c fly.agent.toml`. Its keys are Fly secrets, imported from `agent/.env`. It has no public port: it connects out to LiveKit Cloud, which sends it each session.
 
+The machine needs 2 GB. At 1 GB the warm processes plus one session ran out of memory, and the kernel killed the session.
+
+Before a party, run `npm run preflight`. It checks the live kiosk, the agent machine and each paid service, and prints `Ready.` or the lines to fix.
+
 To work on the agent locally, run `cd agent && npm run dev`. LiveKit sends sessions to any worker registered as `vex`, so stop the Fly machine first (`fly scale count 0 -c fly.agent.toml`), or the two will share sessions.
 
 

@@ -324,4 +324,5 @@ export default defineAgent({
   },
 });
 
-cli.runApp(new ServerOptions({ agent: fileURLToPath(import.meta.url), agentName: env("LIVEKIT_AGENT_NAME", "vex") }));
+// One warm process is enough for one kiosk. Each costs ~250 MB; two plus a session ran a 1 GB machine out of memory.
+cli.runApp(new ServerOptions({ agent: fileURLToPath(import.meta.url), agentName: env("LIVEKIT_AGENT_NAME", "vex"), numIdleProcesses: 1 }));

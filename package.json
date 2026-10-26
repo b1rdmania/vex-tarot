@@ -6,7 +6,8 @@
     "test:e2e": "node test/e2e.js",
     "test": "node --test test/*.test.mjs",
     "test:live": "node test/live-e2e.js",
-    "build:retro": "node scripts/build-retro.mjs"
+    "build:retro": "node scripts/build-retro.mjs",
+    "preflight": "scripts/preflight.sh"
   },
   "devDependencies": {
     "livekit-client": "^2.22.4",

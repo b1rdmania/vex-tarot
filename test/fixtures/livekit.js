@@ -1,4 +1,4 @@
-export const RoomEvent = Object.fromEntries(["TrackSubscribed", "TrackUnsubscribed", "DataReceived", "Disconnected", "Reconnecting", "Reconnected"].map(x => [x, x]));
+export const RoomEvent = Object.fromEntries(["TrackSubscribed", "TrackUnsubscribed", "DataReceived", "Disconnected", "ParticipantDisconnected", "Reconnecting", "Reconnected"].map(x => [x, x]));
 export const Track = { Kind: { Video: "video", Audio: "audio" } };
 const mock = window.__vexMock = { rooms: [], disconnects: 0, sent: [], data: [] };
 export class Room {
