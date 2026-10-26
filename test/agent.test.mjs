@@ -28,7 +28,7 @@ async function setup(extraEnv = {}) {
     process: { env: extraEnv }, fetch() { throw Error("Unexpected network call"); },
     AgentSessionEventTypes: events, voice: { Agent, AgentSession: Session }, defineAgent: x => x, llm: { tool: x => x },
     log: () => Object.fromEntries(["info", "warn", "error"].map(level => [level, (...args) => logs.push(args)])),
-    deepgram: { STT: Service }, elevenlabs: { TTS: Service }, liveavatar: { AvatarSession: Service }, openai: { LLM: Service }, OpenAI: Service,
+    deepgram: { STT: Service }, elevenlabs: { TTS: Service }, liveavatar: { AvatarSession: Service }, openai: { LLM: Service }, OpenAI: Service, BackgroundVoiceCancellation: () => ({}),
     setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: id => timers.delete(id),
   });
   const source = fs.readFileSync(new URL("../agent/agent.js", import.meta.url), "utf8")

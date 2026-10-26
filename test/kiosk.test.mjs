@@ -157,6 +157,31 @@ test("failed reconnect closes the old room and offers retry", async t => {
   assert.equal(await page.locator("#stage").getAttribute("data-phase"), "error");
   assert.equal(await page.evaluate(() => window.__vexMock.disconnects), 1);
 });
+test("agent leaving mid-reading offers retry instead of hanging", async t => {
+  const page = await pageFor(t);
+  await start(page); await ready(page);
+  await event(page, { type: "state", state: "thinking" });
+  await page.evaluate(() => window.__vexMock.rooms[0].handlers.get("ParticipantDisconnected")({ identity: "guest-2", isAgent: false }));
+  assert.equal(await page.locator("#stage").getAttribute("data-phase"), "conversation");
+  await page.evaluate(() => window.__vexMock.rooms[0].handlers.get("ParticipantDisconnected")({ identity: "vex-agent", isAgent: true }));
+  assert.equal(await page.locator("#stage").getAttribute("data-phase"), "error");
+  assert.equal(await page.getByRole("button", { name: "Try again" }).isVisible(), true);
+});
+
+test("Vex stuck thinking gives up after 30 seconds", async t => {
+  const page = await pageFor(t);
+  await start(page); await ready(page);
+  await event(page, { type: "state", state: "thinking" });
+  await page.clock.runFor(20_000);
+  await event(page, { type: "state", state: "speaking" });
+  await event(page, { type: "state", state: "thinking" });
+  await page.clock.runFor(20_000);
+  assert.equal(await page.locator("#stage").getAttribute("data-phase"), "conversation");
+  await page.clock.runFor(11_000);
+  assert.equal(await page.locator("#stage").getAttribute("data-phase"), "error");
+  assert.equal(await page.evaluate(() => window.__vexMock.disconnects), 1);
+});
+
 test("Celtic announcement chooses ten cards without a tool event", async t => {
   const page = await pageFor(t);
   await start(page); await ready(page);
