@@ -28,7 +28,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); await new Promise(done => server?.close(done)); });
 async function pageFor(t, options = {}) {
-  const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  const page = await browser.newPage(options.phone ? { viewport: { width: 390, height: 664 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true } : { viewport: { width: 1366, height: 768 } });
   t.after(() => page.close());
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -146,6 +146,14 @@ test("mobile layout remains usable without horizontal overflow", async t => {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.equal(await page.getByRole("button", { name: "Leave" }).isVisible(), true);
   await shot(page, "phone-reading");
+});
+
+test("phone: the whole room fits the screen and Talk to Vex can be tapped", async t => {
+  const page = await pageFor(t, { phone: true });
+  await page.waitForFunction(() => document.getElementById("frame").style.getPropertyValue("--scale"));
+  assert.equal(await page.evaluate(() => document.getElementById("frame").getBoundingClientRect().right <= document.documentElement.clientWidth), true);
+  await page.getByRole("button", { name: "Talk to Vex" }).tap();
+  await page.waitForFunction(() => window.__vexMock.rooms.length === 1);
 });
 
 test("failed reconnect closes the old room and offers retry", async t => {

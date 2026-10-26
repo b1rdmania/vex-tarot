@@ -32,9 +32,11 @@ for (const [id, el] of Object.entries({ talk: buttons.talk, type: typeBox, leave
   el.addEventListener("pointerleave", off); el.addEventListener("blur", off);
 }
 // Fill the screen. Above x4 the slight unevenness of a fractional scale is invisible.
+// clientWidth, not innerWidth: on phones an oversized frame widens innerWidth, which kept the frame oversized.
 function fit() {
-  const room = Math.min(innerWidth / 320, innerHeight / 212);
-  frame.style.setProperty("--scale", room >= 2 && room < 4 ? Math.floor(room) : room.toFixed(3));
+  const { clientWidth, clientHeight } = document.documentElement;
+  const room = Math.min(clientWidth / 320, clientHeight / 212);
+  frame.style.setProperty("--scale", room >= 2 && room < 4 ? Math.floor(room) : (Math.floor(room * 1000) / 1000));
 }
 function fullscreen(on = !document.fullscreenElement) {
   if (on && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
