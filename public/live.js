@@ -269,7 +269,7 @@ function onEvent(run, msg) {
     if (msg.state === "thinking") run.stallTimer = schedule(run, () => fail(run, "Vex has gone quiet. Please try again."), THINKING_TIMEOUT_MS);
     if (!crisis) status(({ listening: typeOnly ? "Your turn. Type below." : "Your turn. Speak normally.", thinking: "Vex is considering you...", speaking: typeOnly ? "Vex is speaking." : "Vex is speaking. You can interrupt." })[msg.state] || "Connecting...");
   }
-  if (msg.type === "cards") { deck = msg; if (run.pendingDeal) { deal(run, run.pendingDeal.spread, run.pendingDeal.question); run.pendingDeal = null; } }
+  if (msg.type === "cards") { deck = msg; scene.preload(msg.cards); if (run.pendingDeal) { deal(run, run.pendingDeal.spread, run.pendingDeal.question); run.pendingDeal = null; } }
   if (msg.type === "reading-ready") ready = true;
   if (msg.type === "deal" && !crisis) { agentArrived(run); if (!deck) run.pendingDeal = msg; else deal(run, msg.spread, msg.question); }
   if (msg.type === "verdict" && !crisis) { verdict = msg.text || ""; $("verdict").textContent = verdict; }
