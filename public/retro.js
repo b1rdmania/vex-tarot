@@ -76,7 +76,13 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
   const cards = new Map();
   const cardImage = (size, file) => {
     const key = `${size}/${file}`;
-    if (!cards.has(key)) { const img = new Image(); img.src = `${BASE}cards/${size}/${file.replace(/\.jpg$/, ".png")}`; cards.set(key, img); }
+    if (!cards.has(key)) {
+      const img = new Image();
+      // A failed load is dropped after a second, so the next frame asks again instead of showing a blank card all night.
+      img.onerror = () => setTimeout(() => { if (cards.get(key) === img) cards.delete(key); }, 1000);
+      img.src = `${BASE}cards/${size}/${file.replace(/\.jpg$/, ".png")}`;
+      cards.set(key, img);
+    }
     return cards.get(key);
   };
 
@@ -305,6 +311,8 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
       const r = sheet.reactions[name];
       if (r) state.reaction = { name, until: performance.now() + r.holdMs, rest: r.restMouth || null };
     },
+    // Fetch the faces before Vex names them; on slow wifi a face fetched at flip time arrives after the flip.
+    preload(faces) { for (const face of faces) for (const size of ["xs", "sm", "lg"]) cardImage(size, face.img); },
     deal(positions) { state.spread = positions.map((position) => ({ position, face: null, faceAt: 0 })); state.lit = -1; },
     turn(i, card) {
       const slot = state.spread[i];
