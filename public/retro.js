@@ -230,18 +230,17 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     leave: slotC,
     talk: (() => { const t = room.rects.table, w = 150, h = 34; return { x: Math.round(t.x + t.width / 2 - w / 2), y: Math.round(t.y + t.height / 2 - h / 2), width: w, height: h }; })(),
   };
-  function typedLabel(rect) {
-    const t = state.typing;
-    if (!t.enabled || (!t.value && !t.focused)) return "Type to Vex";
-    const caret = t.focused && (!t.value || Math.floor(performance.now() / 500) % 2) ? "_" : " ";
-    const room = Math.floor(rect.width / 6) - 3;
-    return `> ${normalise(t.value).slice(-room)}${caret}`;
-  }
+  // The font has no ">" or "_", so the cursor is a drawn block. It blinks while the box has focus.
   function drawControls() {
     const t = state.typing;
     if (t.enabled) {
-      const r = layout.type;
-      text(typedLabel(r), r.x + r.width / 2, r.y + 4, t.value ? C.hover : state.hover === "type" ? C.hover : C.label, { align: "center" });
+      const r = layout.type, room = Math.floor(r.width / 6) - 3;
+      const label = t.value ? normalise(t.value).slice(-room) : "type here";
+      const fg = t.value || state.hover === "type" ? C.hover : C.gold;
+      const img = textImage(normalise(label), fg);
+      const left = Math.round(r.x + r.width / 2 - (img.width + 6) / 2);
+      text(label, left, r.y + 4, fg);
+      if (t.focused && Math.floor(performance.now() / 500) % 2 === 0) { ctx.fillStyle = colour(fg); ctx.fillRect(left + img.width, r.y + 4, 4, 7); }
     }
     if (state.controls.leave) {
       const r = layout.leave;
