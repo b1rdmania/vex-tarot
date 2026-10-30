@@ -3,6 +3,7 @@
   "main": "src/worker.js",
   "compatibility_date": "2026-05-01",
   "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "routes": [{ "pattern": "vex.cherrygalore.com", "custom_domain": true }],
   "vars": {
     "VOICE_ID": "X6VIT9ZXy5Nr7EmuLOGz",
     "LLM_MODEL": "moonshotai/kimi-k3",

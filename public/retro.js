@@ -118,7 +118,7 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     reaction: null, blinkAt: 0, blinkStart: -1,
     spread: [], lit: -1, hand: null, reveal: null,
     label: "", status: "",
-    controls: { talk: "Talk to Vex", leave: null }, hover: null,
+    controls: { talk: "Talk to Vex", leave: null }, hint: "or press space", hover: null,
     typing: { value: "", focused: false, enabled: false }, speechColour: C.speech, dimmed: false,
   };
 
@@ -248,7 +248,7 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
       ctx.fillStyle = colour(C.ink); ctx.fillRect(r.x, r.y, r.width, r.height);
       const img = textImage(normalise(state.controls.talk), state.hover === "talk" ? C.hover : C.label);
       ctx.drawImage(img, Math.round(r.x + r.width / 2 - img.width), r.y + 5, img.width * 2, img.height * 2);
-      text("or press space", r.x + r.width / 2, r.y + 24, C.muted, { align: "center" });
+      text(state.hint, r.x + r.width / 2, r.y + 24, state.hint === "or press space" ? C.muted : C.gold, { align: "center" });
     }
   }
 
@@ -323,6 +323,8 @@ export async function createScene(canvas, roomId = "01-velvet-alcove") {
     label(str) { state.label = str || ""; },
     status(str) { state.status = str || ""; },
     controls(next) { Object.assign(state.controls, next); },
+    // The small line under Talk to Vex. At most 23 characters (the box is 150 px, glyphs 6 px).
+    hint(str) { state.hint = str; },
     typing(next) { Object.assign(state.typing, next); },
     hover(id) { state.hover = id; },
     dim(on) { state.dimmed = on; },
