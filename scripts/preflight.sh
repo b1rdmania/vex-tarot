@@ -3,7 +3,7 @@
 # The keys come from agent/.env and .dev.vars. They must match the deployed Fly and Worker secrets.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-KIOSK="https://vex-tarot.andy-ff7.workers.dev"
+KIOSK="https://vex.cherrygalore.com"
 APP="vex-agent"
 export GODEBUG=netdns=go
 get() { grep -h "^$1=" "$2" | head -1 | cut -d= -f2- | tr -d '"'; }
