@@ -14,6 +14,8 @@ const CONNECT_TIMEOUT_MS = 35_000;
 const THINKING_TIMEOUT_MS = 30_000;
 const params = new URLSearchParams(location.search);
 const store = { get(key) { try { return localStorage.getItem(key); } catch { return null; } }, set(key, value) { try { localStorage.setItem(key, value); } catch {} } };
+// ?type: the guest types and Vex still speaks. The mic is never opened, so room noise can't reach her.
+const typeOnly = params.has("type");
 const accessCode = params.get("code") || store.get("vexCode") || "";
 if (accessCode) store.set("vexCode", accessCode);
 let current = null;
@@ -161,8 +163,8 @@ async function start() {
   stage.dataset.state = "session";
   phase("connecting");
   controls({ type: true, leave: "Leave" });
-  $("intro").textContent = "Allow your microphone when asked. Sit close and speak normally.";
-  status("Allow your microphone. Connecting...");
+  $("intro").textContent = typeOnly ? "Type to Vex below. She will answer out loud." : "Allow your microphone when asked. Sit close and speak normally.";
+  status(typeOnly ? "Connecting..." : "Allow your microphone. Connecting...");
   run.watchdog = schedule(run, () => fail(run, "Vex hasn’t answered. Check your connection and try again."), CONNECT_TIMEOUT_MS);
   try {
     const res = await fetch("/api/token", { method: "POST", headers: { "X-Vex-Code": accessCode }, signal: run.abort.signal });
@@ -173,12 +175,13 @@ async function start() {
     wire(run);
     await room.connect(url, token);
     if (current !== run || run.closing) { await room.disconnect(); return; }
-    await room.localParticipant.setMicrophoneEnabled(true, { echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+    if (!typeOnly) await room.localParticipant.setMicrophoneEnabled(true, { echoCancellation: true, noiseSuppression: true, autoGainControl: true });
     if (current !== run || run.closing) { await room.disconnect(); return; }
     run.micReady = true;
     if (run.heardAgent) { clearTimeout(run.watchdog); run.timers.delete(run.watchdog); }
-    log("connected, mic on");
-    if (!run.heardAgent) status("Microphone ready. Waiting for Vex...");
+    log(typeOnly ? "connected, typing only" : "connected, mic on");
+    if (typeOnly) typeBox.focus();
+    if (!run.heardAgent) status(typeOnly ? "Waiting for Vex..." : "Microphone ready. Waiting for Vex...");
   } catch (err) {
     if (current !== run || run.closing) return;
     // No microphone: carry on as a typed reading rather than failing.
@@ -200,7 +203,7 @@ function agentArrived(run) {
   if (run.micReady) { clearTimeout(run.watchdog); run.timers.delete(run.watchdog); }
   if (crisis || spread) return;
   phase("conversation");
-  status("Vex is here. Say hello.");
+  status(typeOnly ? "Vex is here. Type hello below." : "Vex is here. Say hello.");
 }
 function wire(run) {
   const room = run.room;
@@ -263,7 +266,7 @@ function onEvent(run, msg) {
     stage.dataset.agent = msg.state;
     clearTimeout(run.stallTimer); run.timers.delete(run.stallTimer);
     if (msg.state === "thinking") run.stallTimer = schedule(run, () => fail(run, "Vex has gone quiet. Please try again."), THINKING_TIMEOUT_MS);
-    if (!crisis) status(({ listening: "Your turn. Speak normally.", thinking: "Vex is considering you...", speaking: "Vex is speaking. You can interrupt." })[msg.state] || "Connecting...");
+    if (!crisis) status(({ listening: typeOnly ? "Your turn. Type below." : "Your turn. Speak normally.", thinking: "Vex is considering you...", speaking: typeOnly ? "Vex is speaking." : "Vex is speaking. You can interrupt." })[msg.state] || "Connecting...");
   }
   if (msg.type === "cards") { deck = msg; if (run.pendingDeal) { deal(run, run.pendingDeal.spread, run.pendingDeal.question); run.pendingDeal = null; } }
   if (msg.type === "reading-ready") ready = true;

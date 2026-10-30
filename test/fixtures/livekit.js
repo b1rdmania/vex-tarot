@@ -1,9 +1,10 @@
 export const RoomEvent = Object.fromEntries(["TrackSubscribed", "TrackUnsubscribed", "DataReceived", "Disconnected", "ParticipantDisconnected", "Reconnecting", "Reconnected"].map(x => [x, x]));
 export const Track = { Kind: { Video: "video", Audio: "audio" } };
-const mock = window.__vexMock = { rooms: [], disconnects: 0, sent: [], data: [] };
+const mock = window.__vexMock = { rooms: [], disconnects: 0, sent: [], data: [], micCalls: 0 };
 export class Room {
   handlers = new Map();
   localParticipant = { identity: "guest", setMicrophoneEnabled: async () => {
+    mock.micCalls++;
     if (window.__micDenied) throw new DOMException("Denied", "NotAllowedError");
   }, sendText: async (text, options) => { mock.sent.push({ text, topic: options?.topic }); },
   publishData: async (payload, options) => { mock.data.push({ text: new TextDecoder().decode(payload), topic: options?.topic }); } };

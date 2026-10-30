@@ -142,4 +142,6 @@ To work on the agent locally, run `cd agent && npm run dev`. LiveKit sends sessi
 
 Use a quiet corner with one seated guest. The opening keeps the mirror prominent; once cards are dealt, the current card gets the largest artwork and the full spread remains underneath. When video is unavailable, the dark mirror responds to Vex's audio. Visible status text tells the guest when to speak. Captions are optional and can help in a noisy room. The final spread and verdict are held for a photograph.
 
+For a loud room, add `&type` to the link (`/?code=...&type`). The kiosk never opens the microphone. The guest types, and Vex still answers out loud.
+
 The local regression suite checks simulated sessions, not real microphone quality, avatar lip sync, or provider availability. Those still need a room rehearsal before the party.

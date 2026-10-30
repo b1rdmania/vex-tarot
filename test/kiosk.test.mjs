@@ -68,6 +68,19 @@ test("denied microphone carries on as a typed reading", async t => {
   // Events from a discarded room cannot reset or end this guest's session.
   await page.evaluate(() => window.__vexMock.rooms[0].event({ type: "deal", spread: "short" }));
 });
+test("?type never opens the microphone; the guest types and Vex still talks", async t => {
+  const page = await pageFor(t, { query: "/?type" });
+  await start(page); await ready(page);
+  assert.equal(await page.evaluate(() => window.__vexMock.micCalls), 0);
+  assert.equal(await page.locator("#status-text").innerText(), "Your turn. Type below.");
+  assert.equal(await page.evaluate(() => document.activeElement.id), "type", "type box is focused");
+  await page.keyboard.type("Will I get the flat?");
+  await page.keyboard.press("Enter");
+  assert.deepEqual(await page.evaluate(() => window.__vexMock.sent), [{ text: "Will I get the flat?", topic: "lk.chat" }]);
+  await event(page, { type: "state", state: "speaking" });
+  assert.equal(await page.locator("#status-text").innerText(), "Vex is speaking.");
+});
+
 test("bad access code gives a visible recovery message", async t => {
   const page = await pageFor(t, { status: 401 });
   await page.getByRole("button", { name: "Talk to Vex" }).click();
