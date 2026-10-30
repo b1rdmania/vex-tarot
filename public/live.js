@@ -25,7 +25,7 @@ let ready = false, crisis = false, verdict = "";
 let stopDemo = null;
 
 const scene = await createScene(canvas, params.get("room") || undefined);
-if (typeOnly) scene.hint("mic off tonight: type");
+if (typeOnly) scene.hint("press space, then type");
 // Real controls sit over what the canvas draws (scene.layout, native 320x212 pixels).
 for (const [id, el] of Object.entries({ talk: buttons.talk, type: typeBox, leave: buttons.leave })) {
   const r = scene.layout[id];
@@ -137,7 +137,7 @@ function reset() {
   stage.dataset.state = "idle";
   phase("idle");
   controls({ talk: "Talk to Vex" });
-  status("");
+  status(typeOnly ? "Mic off tonight. It's loud, so type to Vex." : "");
 }
 function fail(run, message) {
   if (current !== run || run.closing) return;
